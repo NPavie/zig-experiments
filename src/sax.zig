@@ -12,7 +12,7 @@ const testing = std.testing;
 //                         [#x1FFFE-#x1FFFF], [#x2FFFE-#x2FFFF], [#x3FFFE-#x3FFFF],
 //                         [#x4FFFE-#x4FFFF], [#x5FFFE-#x5FFFF], [#x6FFFE-#x6FFFF],
 //                         [#x7FFFE-#x7FFFF], [#x8FFFE-#x8FFFF], [#x9FFFE-#x9FFFF],
-//                         [#xAFFFE-#xAFFFF], [#xBFFFE-#xBFFFF], [#xCFFFE-#xCFFFF],
+//                         [#xAFFFE-#xAFFFF], [#xBFFFE-#xBFFFF], [#x.cFFFE-#x.cFFFF],
 //                         [#xDFFFE-#xDFFFF], [#xEFFFE-#xEFFFF], [#xFFFFE-#xFFFFF],
 //                         [#x10FFFE-#x10FFFF].
 //
@@ -387,40 +387,23 @@ const Doctype = struct {
 // consider buffering until some separator is found (any space or < or > or & or ; ir " or ')
 // (opening and closing tag state, opening and closing entity state and spaces for element separations within tag)
 
-const TokenizerStatus = enum {
-    Text, // default state
-    Entity, // & -> // end =  EntityStarted + ; => go up the state tree
-    Tag, // Text + <
-    DataTag, // Tag + !
-    OpeningTag, // Tag + (namespace+":")? + name + (S + Attribute)* + >
-    Attribute, // OpeningTag + S + (namespace+":")? + name + "="" + AttributeValue + """
-    AttributeValue, // Attribute + =("|')' + content + ("|')
-    Doctype, // DataTagStarted + "DOCTYPE" + S + RootName + S + ((SYSTEM) | (PUBLIC + S + PublicID)) + S + SystemId + (DoctypeSubset)? + S* + >
-    DoctypeSubset, // (DoctypeStarted | DoctypeSubset) + [ + (DoctypeSubset | content) + ]
-    ClosingTag, // TagStarted + / + (namespace + ":")? + name + >
-    Comment, // DataTagStarted + '--' + content + -- + >
-    ProcessInstruction, // TagStarted + ? + target + S + content + ?>
-    CData, // <![CDATA[ + content + ]]>
-};
-
 const TokenizerData = union(enum) {
-    text: std.ArrayList(u8),
-    entity: std.ArrayList(u8),
-    tag: std.ArrayList(u8),
-    dataTag: std.ArrayList(u8),
-    namedTag: OpeningTag,
-    attribute: Attribute,
-    attributeValue: std.ArrayList(u8),
-    doctype: Doctype,
-    doctypeSubset: std.ArrayList(u8),
-    closingTag: ClosingTag,
-    comment: std.ArrayList(u8),
-    processingInstruction: ProcessingInstruction,
-    cdata: std.ArrayList(u8),
+    text: std.ArrayList(u8), // default state
+    entity: std.ArrayList(u8), // & -> // end =  EntityStarted + ; => go up the state tree
+    tag: std.ArrayList(u8), // Text + <
+    dataTag: std.ArrayList(u8), // Tag + !
+    namedTag: OpeningTag, // Tag + (namespace+":")? + name + (S + Attribute)* + >
+    attribute: Attribute, // OpeningTag + S + (namespace+":")? + name + "="" + AttributeValue + """
+    //attributeValue: std.ArrayList(u8), // Attribute + =("|')' + content + ("|')
+    doctype: Doctype, // DataTagStarted + "DO.cTYPE" + S + RootName + S + ((SYSTEM) | (PUBLI.c + S + PublicID)) + S + SystemId + (DoctypeSubset)? + S* + >
+    doctypeSubset: std.ArrayList(u8), // (DoctypeStarted | DoctypeSubset) + [ + (DoctypeSubset | content) + ]
+    closingTag: .closingTag, // TagStarted + / + (namespace + ":")? + name + >
+    comment: std.ArrayList(u8), // DataTagStarted + '--' + content + -- + >
+    processingInstruction: ProcessingInstruction, // TagStarted + ? + target + S + content + ?>
+    cdata: std.ArrayList(u8), // <![.cDATA[ + content + ]]>
 };
 
 const State = struct {
-    step: TokenizerStatus = TokenizerStatus.Text,
     content: TokenizerData = undefined,
     previous: ?*State = null, // for linked list to previous state
     line: usize = 0,
@@ -436,7 +419,7 @@ const EventsHandler = struct {
     OnSGMLDeclaration: ?*fn () void = undefined,
     OnDocumentEnd: ?*fn () void = undefined,
     OnOpeningTag: ?*fn (tag: *OpeningTag) void = undefined,
-    OnClosingTag: ?*fn (tag: *ClosingTag) void = undefined,
+    OnClosingTag: ?*fn (tag: *.closingTag) void = undefined,
     OnDoctypeStarted: ?*fn () void = undefined,
     OnDoctype: ?*fn (doctype: *Doctype) void = undefined,
     OnDoctypeEnded: ?*fn () void = undefined,
@@ -465,8 +448,7 @@ pub fn ZaxParser() type {
         events: EventsHandler = .{},
         options: Options = .{ .strict = false },
         namespaces: std.ArrayList(Namespace),
-        state: ?*State,
-        buffer: std.ArrayList(u8),
+        state: *State,
         lastOpeningDelimiter: u8 = 0, // basic delimiter (possible value : space, <, &, ", ')
 
         pub fn init(self: Self, events: EventsHandler, alloc: std.mem.Allocator) Self {
@@ -475,6 +457,10 @@ pub fn ZaxParser() type {
                 .allocator = alloc,
                 .events = events,
                 .namespaces = std.ArrayList(Namespace).init(alloc),
+                .state = alloc.create(State){
+                    .previous = null,
+                    .content = TokenizerData{ .text = std.ArrayList(u8).init(alloc) },
+                },
                 .buffer = std.ArrayList(u8).init(alloc),
             };
         }
@@ -512,7 +498,10 @@ pub fn ZaxParser() type {
             //   if state in [TagStarted,TagWithNamespaceStarted, AttributeStarted,AttributeWithNamespaceStarted => error to report but continue if not strict mode
             //
             if (self.state == null) {
-                self.state = self.alloc.create(State);
+                self.state = self.allocator.create(State){
+                    .previous = null,
+                    .content = TokenizerData{ .text = std.ArrayList(u8).init(self.alloc) },
+                };
                 if (self.events.OnStart) |onStart| {
                     onStart();
                 }
@@ -530,16 +519,22 @@ pub fn ZaxParser() type {
                 // Switch on buffer content
                 switch (char) {
                     '<' => {
-                        switch (self.state.step) {
+                        switch (self.state.content) {
                             // treated as text
-                            TokenizerStatus.Comment => {},
-                            TokenizerStatus.CData => {},
-                            //
-                            else => {
+                            .comment => {},
+                            .cdata => {},
+                            .text => |t| {
+                                if (t.len > 0) {
+                                    // raise text event
+                                    if (self.events.OnText) |onText| {
+                                        onText(self.state.text.items);
+                                    }
+                                    // reset text buffer
+                                    self.state.text.clear();
+                                }
                                 // default : create a new tag state pointer
                                 const newState: *State = self.allocator.create(State){
                                     .previous = &(self.state), // point to current state
-                                    .step = TokenizerStatus.Tag,
                                     .content = .{
                                         .tag = std.ArrayList(u8).init(self.alloc),
                                     },
@@ -548,16 +543,18 @@ pub fn ZaxParser() type {
                                 // update current state pointer
                                 self.state = newState;
                             },
+                            //
+                            else => {},
                         }
                     },
-                    ' ', '\r', '\n', '\t' => { // TODO : hande all spaces
-                        switch (self.state.step) {
-                            TokenizerStatus.Tag => {
+                    ' ', '\r', '\n', '\t', '\f' => { // TODO : hande all spaces
+                        switch (self.state.content) {
+                            .Tag => {
                                 // check buffer content
                                 // if buffer starts with !--, its a comment
                                 //    - create a comment state, add buffer without the !-- characters
-                                // if buffer starts with ![CDATA[, its a cdata
-                                // - create a cdata state, add buffer without the ![CDATA[ characters
+                                // if buffer starts with ![.cDATA[, its a cdata
+                                // - create a cdata state, add buffer without the ![.cDATA[ characters
 
                             },
                             else => {
@@ -566,12 +563,12 @@ pub fn ZaxParser() type {
                         }
                     },
                     '&' => {
-                        switch (self.state.step) {
+                        switch (self.state.content) {
                             // treated as text
-                            TokenizerStatus.Comment => {},
-                            TokenizerStatus.CData => {},
+                            .comment => {},
+                            .cData => {},
                             // error cases : entity already started
-                            TokenizerStatus.Entity => {
+                            .entity => {
                                 // error : entity already started
                                 // if strict mode, report error and abort
                                 // else climb up state up to first non EntityStarted state,
@@ -579,14 +576,13 @@ pub fn ZaxParser() type {
                             },
                             // else treated as entity start
                             else => {
-                                switch (self.state.step) {
+                                switch (self.state.content) {
                                     else => {
                                         // default : create a new entity state
-                                        const newState: *State = self.alloc.create(State){
+                                        const newState: *State = self.allocator.create(State){
                                             .previous = &(self.state),
-                                            .step = TokenizerStatus.Entity,
                                             .content = .{
-                                                .entity = std.ArrayList(u8).init(self.alloc),
+                                                .entity = std.ArrayList(u8).init(self.allocator),
                                             },
                                         };
                                         addToBuffer = false;
@@ -597,8 +593,8 @@ pub fn ZaxParser() type {
                         }
                     },
                     ';' => {
-                        switch (self.state.step) {
-                            TokenizerStatus.EntityStarted => {
+                        switch (self.state.content) {
+                            .entity => {
                                 if (self.state.content.len > 3 and std.mem.eql(u8, self.state.content.?[0..2], "&#x")) {
                                     // content is alledgedly an hexa code
                                 } else if (self.state.content.?[0] == '#') {
@@ -608,7 +604,6 @@ pub fn ZaxParser() type {
                                 } else {
                                     // unknown entity, forward entity as-is
                                 }
-                                addToBuffer = false;
                             },
                             else => {
                                 // no changes in state definition
@@ -616,28 +611,34 @@ pub fn ZaxParser() type {
                         }
                     },
                     '>' => {
-                        switch (self.state.step) {
+                        switch (self.state.content) {
                             // treated as text if current buffer is not
-                            TokenizerStatus.Comment => {
+                            .comment => {
                                 // if previous buffer is not ending with --
                                 // add as comment text
                                 // else consider comment as closed
                                 // and raise event with comment content
                             },
-                            TokenizerStatus.CData => {
+                            .cdata => {
                                 // if previous buffer is not ending with --
                                 // add as comment text
                                 // else consider comment as closed
                                 // and raise event with comment content
                             },
-                            TokenizerStatus.OpeningTag => {
+                            .namedTag => {
+                                // ending current tag
+                            },
+                            .processingInstruction => {
+                                // ending current tag
+                            },
+                            .doctype => {
                                 // ending current tag
                             },
                             else => {},
                         }
                     },
                     '\n' => {
-                        switch (self.state.step) {
+                        switch (self.state.content) {
                             else => {},
                         }
                     },
@@ -648,19 +649,19 @@ pub fn ZaxParser() type {
                     '!' => {},
                     '-' => {},
                     ':' => {
-                        switch (self.state.step) {
-                            TokenizerStatus.TagStarted => {
+                        switch (self.state.content) {
+                            TagStarted => {
                                 // Previous content is a namespace identifier
-                                // Check if namespace exists
+                                // .check if namespace exists
                                 // preregister it in namespace list if not
                                 //
                                 // keep it as currently parsed namespace
                             },
-                            TokenizerStatus.AttributeStarted => {
+                            AttributeStarted => {
                                 // Previous content is a namespace identifier
                                 // Prepare a namespace
                                 // Previous content is a namespace identifier
-                                // Check if namespace exists
+                                // .check if namespace exists
                                 // preregister it in namespace list if not
                                 //
                                 // keep it as currently parsed namespace
@@ -669,14 +670,24 @@ pub fn ZaxParser() type {
                         }
                     },
                     else => { // any other characters
+                        switch (self.state.content) {
+                            .text => {
+                                // add to text buffer
+                                self.state.content.append(char);
+                            },
+                            .entity => {
+                                // add to entity buffer
+                                self.state.entity.append(char);
+                            },
+                            .comment => {
+                                // add to comment buffer
 
-                        switch (self.state.step) {
+                                self.state.comment.append(char);
+                            },
+
                             else => {},
                         }
                     },
-                }
-                if (addToBuffer) {
-                    self.buffer.append(char);
                 }
             }
         }
