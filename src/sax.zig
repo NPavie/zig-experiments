@@ -551,13 +551,31 @@ pub fn ZaxParser() type {
                             else => {},
                         }
                     },
-                    .entity => {
+                    .entity => |e| {
                         switch (char) {
                             ';' => {
-                                if (self.state.content.len > 3 and std.mem.eql(u8, self.state.content.?[0..2], "&#x")) {
+                                if (self.state.content.len > 3 and std.mem.eql(u8, e.items[0..2], "&#x")) {
                                     // content is alledgedly an hexa code
+                                    // convert hexacode to unicode char
+                                    var codepoints: [4]u8 = undefined;
+                                    @memset(codepoints, 0);
+                                    var invalid = false;
+                                    for (0.., e.items[3..]) |iHex, hex| {
+                                        if (hex >= 'a' and hex <= 'z') {
+                                            codepoints[iHex] = hex - 'a';
+                                        } else if (hex >= 'A' and hex <= 'Z') {
+                                            codepoints[iHex] = hex - 'A';
+                                        } else if (hex >= '0' and hex <= '9') {
+                                            codepoints[iHex] = hex - '0';
+                                        } else {
+                                            invalid = true;
+                                            break;
+                                        }
+                                    }
                                 } else if (self.state.content.?[0] == '#') {
+
                                     // content is alledgedly a decimal code
+                                    // convert octal code to char
                                 } else if (ENTITIES.has(self.state.content.?)) {
                                     // entity is textual, check in the entities map
                                 } else {
