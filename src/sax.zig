@@ -74,7 +74,7 @@ const testing = std.testing;
 // - Well-formedness = The external subset, if any, must match the production for extSubset.
 // - Well-formedness = The replacement text of a parameter entity reference in a DeclSep must match the production extSubsetDecl.
 
-const ENTITIES = std.ComptimeStringMap(u8, .{
+const ENTITIES = std.StaticStringMap(u32).initComptime(.{
     .{ "amp", '&' },
     .{ "gt", '>' },
     .{ "lt", '<' },
@@ -340,6 +340,8 @@ fn unicodeToString(u: u32) ![]const u8 {
 const Options = struct {
     /// Strict mode : abort on invalid xml detection
     strict: ?bool = false,
+    /// Preserve entities : do not decode entities in the text
+    preserveEntities: ?bool = false,
 };
 
 /// XML Namespace definition
@@ -448,7 +450,6 @@ pub fn ZaxParser() type {
         options: Options = .{ .strict = false },
         namespaces: std.ArrayList(Namespace),
         state: *State,
-        lastOpeningDelimiter: std.ArrayList(u8) = undefined, // delimiters stack (possible value : space, <, &, ", ')
 
         pub fn init(self: Self, events: EventsHandler, alloc: std.mem.Allocator) Self {
             _ = self;
@@ -460,7 +461,6 @@ pub fn ZaxParser() type {
                     .previous = null,
                     .content = TokenizerData{ .text = std.ArrayList(u8).init(alloc) },
                 },
-                .buffer = std.ArrayList(u8).init(alloc),
             };
         }
 
@@ -554,32 +554,77 @@ pub fn ZaxParser() type {
                     .entity => |e| {
                         switch (char) {
                             ';' => {
-                                if (self.state.content.len > 3 and std.mem.eql(u8, e.items[0..2], "&#x")) {
+                                var codepoints: u32 = 0;
+                                var invalid = false;
+                                if (e.items.len > 3 and std.mem.eql(u8, e.items[0..1], "#x")) {
                                     // content is alledgedly an hexa code
                                     // convert hexacode to unicode char
-                                    var codepoints: [4]u8 = undefined;
-                                    @memset(codepoints, 0);
-                                    var invalid = false;
-                                    for (0.., e.items[3..]) |iHex, hex| {
+                                    for (e.items[2..]) |hex| {
                                         if (hex >= 'a' and hex <= 'z') {
-                                            codepoints[iHex] = hex - 'a';
+                                            codepoints = codepoints * 16 + (hex - 'a');
                                         } else if (hex >= 'A' and hex <= 'Z') {
-                                            codepoints[iHex] = hex - 'A';
+                                            codepoints = codepoints * 16 + (hex - 'A');
                                         } else if (hex >= '0' and hex <= '9') {
-                                            codepoints[iHex] = hex - '0';
+                                            codepoints = codepoints * 16 + (hex - '0');
                                         } else {
                                             invalid = true;
                                             break;
                                         }
                                     }
-                                } else if (self.state.content.?[0] == '#') {
-
+                                } else if (e.items.?[0] == '#') {
                                     // content is alledgedly a decimal code
-                                    // convert octal code to char
-                                } else if (ENTITIES.has(self.state.content.?)) {
+                                    // convert decimal code to char
+                                    for (e.items[1..]) |dec| {
+                                        if (dec >= '0' and dec <= '9') {
+                                            codepoints = codepoints * 16 + (dec - '0');
+                                        } else {
+                                            invalid = true;
+                                            break;
+                                        }
+                                    }
+                                } else if (ENTITIES.has(e.items.?)) {
                                     // entity is textual, check in the entities map
+                                    codepoints = ENTITIES.get(self.state.content.?);
+                                } else invalid = true;
+                                var entityText: []const u8 = undefined;
+                                if (invalid) {
+                                    // invalid or unknown entity, transfert entity as is
+                                    entityText = "&" ++ e.items ++ ";";
                                 } else {
-                                    // unknown entity, forward entity as-is
+                                    entityText = unicodeToString(codepoints);
+                                }
+                                if (self.state.previous) |previous| {
+                                    switch (previous.content) {
+                                        .text => previous.content.text.appendSlice(entityText),
+                                        .attributeValue => previous.content.attributeValue.appendSlice(entityText),
+                                        .comment => previous.content.comment.appendSlice(entityText),
+                                        .cdata => previous.content.cdata.appendSlice(entityText),
+                                        .processingInstruction => previous.content.cdata.appendSlice(entityText),
+                                        .tag => {
+                                            if (self.events.OnXMLErrors) |onXMLErrors| {
+                                                onXMLErrors(&self.state, "Entity found in invalid context");
+                                            }
+                                            previous.content.tag.append('&');
+                                            previous.content.tag.appendSlice(e.items);
+                                            previous.content.tag.append(';');
+                                        },
+                                        .attribute => {
+                                            if (self.events.OnXMLErrors) |onXMLErrors| {
+                                                onXMLErrors(&self.state, "Entity found in invalid context");
+                                            }
+                                            previous.content.attribute.append('&');
+                                            previous.content.attribute.appendSlice(e.items);
+                                            previous.content.attribute.append(';');
+                                        },
+                                        else => {
+                                            if (self.events.OnXMLErrors) |onXMLErrors| {
+                                                onXMLErrors(&self.state, "Entity found in invalid context");
+                                            }
+                                        },
+                                    }
+                                    previous.content.entity.deinit();
+                                    self.allocator.destroy(self.state);
+                                    self.state = previous;
                                 }
                             },
                             else => {
