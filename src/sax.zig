@@ -340,48 +340,52 @@ fn unicodeToString(u: u32) ![]const u8 {
 const Options = struct {
     /// Strict mode : abort on invalid xml detection
     strict: ?bool = false,
-    /// Preserve entities : do not decode entities in the text
+    /// Preserve entities : do not decode entities in the text when raising text events
     preserveEntities: ?bool = false,
 };
 
 /// XML Namespace definition
 const Namespace = struct {
-    prefix: ?[]u8,
-    uri: ?[]u8,
+    prefix: ?std.ArrayList(u8),
+    uri: ?std.ArrayList(u8),
 };
 
 /// XML Attribute : prefix:name="?value"
-const Attribute = struct { namespace: ?*Namespace, name: []u8, value: ?[]u8 };
+const Attribute = struct {
+    namespace: ?*Namespace,
+    name: std.ArrayList(u8),
+    value: ?std.ArrayList(u8),
+};
 
 /// XML Tag
 const TagBase = struct {
     namespace: ?*Namespace,
-    name: []u8,
+    name: std.ArrayList(u8),
 };
 const OpeningTag = struct {
     base: TagBase,
     selfClosing: ?bool,
-    attributes: ?[]Attribute,
+    attributes: ?std.ArrayList(Attribute),
 };
 const ClosingTag = TagBase;
 
 /// XML Processing Instruction
 /// Note that the prolog is considered a special PI
 const ProcessingInstruction = struct {
-    target: []u8,
-    content: []u8,
+    target: std.ArrayList(u8),
+    content: std.ArrayList(u8),
 };
 
 /// Doctype declaration of an XML document
 const Doctype = struct {
     /// Root element name
-    root: []u8,
+    root: std.ArrayList(u8),
     /// Public identifier for public typed DTD (undefined on SYSTEM declaration)
-    publicId: ?[]u8,
+    publicId: ?std.ArrayList(u8),
     /// System identifier (URI or path the dtd file)
-    systemId: ?[]u8,
+    systemId: ?std.ArrayList(u8),
     /// Possible subset of dtd declaration available in doctype
-    subset: ?[]u8,
+    subset: ?std.ArrayList(u8),
 };
 
 // Ideas
@@ -450,6 +454,9 @@ pub fn ZaxParser() type {
         options: Options = .{ .strict = false },
         namespaces: std.ArrayList(Namespace),
         state: *State,
+        charBuffer: std.ArrayList(u8),
+        attributesBuffer: std.ArrayList(Attribute),
+        namespacesBuffer: std.ArrayList(Namespace),
 
         pub fn init(self: Self, events: EventsHandler, alloc: std.mem.Allocator) Self {
             _ = self;
@@ -461,6 +468,7 @@ pub fn ZaxParser() type {
                     .previous = null,
                     .content = TokenizerData{ .text = std.ArrayList(u8).init(alloc) },
                 },
+                .charBuffer = std.ArrayList(u8).init(alloc),
             };
         }
 
@@ -477,7 +485,7 @@ pub fn ZaxParser() type {
             }
             // release all namespaces
             self.namespaces.deinit();
-            self.buffer.deinit();
+            self.charBuffer.deinit();
         }
 
         // Parsing algorithm
@@ -537,6 +545,8 @@ pub fn ZaxParser() type {
                                 };
                                 // update current state pointer
                                 self.state = newState;
+                                self.charBuffer.clearRetainingCapacity();
+                                self.charBuffer.append(char);
                             },
                             '&' => {
                                 // default : create a new entity state
@@ -547,6 +557,8 @@ pub fn ZaxParser() type {
                                     },
                                 };
                                 self.state = newState;
+                                self.charBuffer.clearRetainingCapacity();
+                                self.charBuffer.append(char);
                             },
                             else => {},
                         }
@@ -604,17 +616,19 @@ pub fn ZaxParser() type {
                                             if (self.events.OnXMLErrors) |onXMLErrors| {
                                                 onXMLErrors(&self.state, "Entity found in invalid context");
                                             }
-                                            previous.content.tag.append('&');
-                                            previous.content.tag.appendSlice(e.items);
-                                            previous.content.tag.append(';');
+                                            previous.content.tag.appendSlice("&" ++ e.items ++ ";");
                                         },
                                         .attribute => {
                                             if (self.events.OnXMLErrors) |onXMLErrors| {
                                                 onXMLErrors(&self.state, "Entity found in invalid context");
                                             }
-                                            previous.content.attribute.append('&');
-                                            previous.content.attribute.appendSlice(e.items);
-                                            previous.content.attribute.append(';');
+                                            previous.content.attribute.appendSlice("&" ++ e.items ++ ";");
+                                        },
+                                        .closingTag => {
+                                            if (self.events.OnXMLErrors) |onXMLErrors| {
+                                                onXMLErrors(&self.state, "Entity found in invalid context");
+                                            }
+                                            previous.content.closingTag.appendSlice("&" ++ e.items ++ ";");
                                         },
                                         else => {
                                             if (self.events.OnXMLErrors) |onXMLErrors| {
@@ -653,6 +667,8 @@ pub fn ZaxParser() type {
 test "parser initialization" {}
 
 test "parser pi analysis" {}
+
+test "parser tag analysis" {}
 
 test "parser simple document" {}
 
