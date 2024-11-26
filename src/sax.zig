@@ -60,6 +60,7 @@ const testing = std.testing;
 // extSubset = TextDecl? extSubsetDecl
 // extSubsetDecl = ( markupdecl | conditionalSect | DeclSep)*
 
+// STag	= '<' Name (S Attribute)* S? '>'
 //
 
 // Constraints explicited in specifications :
@@ -354,7 +355,7 @@ const Namespace = struct {
 const Attribute = struct {
     namespace: ?*Namespace,
     name: std.ArrayList(u8),
-    value: ?std.ArrayList(u8),
+    value: std.ArrayList(u8),
 };
 
 /// XML Tag
@@ -397,7 +398,7 @@ const TokenizerData = union(enum) {
     text: std.ArrayList(u8), // default state
     entity: std.ArrayList(u8), // & -> // end =  EntityStarted + ; => go up the state tree
     tag: std.ArrayList(u8), // Text + < // tag analysis buffer
-    namedTag: OpeningTag, // Tag + (namespace+":")? + name + (S + Attribute)* + >
+    startTag: OpeningTag, // Tag + (namespace+":")? + name + (S + Attribute)* + >
     attribute: std.ArrayList(u8), // OpeningTag + S + (namespace+":")? + name + "="" + AttributeValue + """
     attributeValue: std.ArrayList(u8), // Attribute + =("|')' + content + ("|')
     doctype: Doctype, // DataTagStarted + "DOCTYPE" + S + RootName + S + ((SYSTEM) | (PUBLIC + S + PublicID)) + S + SystemId + (DoctypeSubset)? + S* + >
@@ -408,14 +409,71 @@ const TokenizerData = union(enum) {
     cdata: std.ArrayList(u8), // <![CDATA[ + content + ]]>
 };
 
+// const TokenizerStatus = enum {
+//     text,
+//     entity,
+//     tag,
+//     startTag,
+//     endTag,
+//     attribute,
+//     attributeValue,
+//     doctype,
+//     doctypeSubset,
+//     comment,
+//     processingInstruction,
+//     cdata,
+// };
+
 const State = struct {
     content: TokenizerData = undefined,
+    //status: TokenizerStatus = TokenizerStatus.text,
     previous: ?*State = null, // for linked list to previous state
     line: usize = 0,
     column: usize = 0,
     // idea : compute an xpath expression while computing the state
     //xpath: std.ArrayList(u8) = undefined, // XPATH path of currently parsed element
 };
+
+fn newState(previous: *State, content: TokenizerData, alloc: std.mem.Allocator) *State {
+    return alloc.create(State){
+        .previous = previous,
+        .content = content,
+        .line = previous.line,
+        .column = previous.column,
+    };
+}
+
+fn popState(state: *State, alloc: std.mem.Allocator) *State {
+    // retrieve previous state
+    const previous = state.previous;
+    // clean current state
+    switch (state.content) {
+        .text => state.content.text.deinit(),
+        .entity => state.content.entity.deinit(),
+        .tag => state.content.tag.deinit(),
+        .startTag => |s| {
+            s.base.name.deinit();
+            s.attributes.?.deinit();
+        },
+        .attribute => state.content.attribute.deinit(),
+        .attributeValue => state.content.attributeValue.deinit(),
+        .doctype => |d| {
+            d.publicId.?.deinit();
+            d.systemId.?.deinit();
+            d.subset.?.deinit();
+            d.root.deinit();
+        },
+        .doctypeSubset => state.content.doctypeSubset.deinit(),
+        .closingTag => {},
+        .comment => state.content.comment.deinit(),
+        .processingInstruction => {},
+        .cdata => state.content.cdata.deinit(),
+        else => {},
+    }
+    alloc.destroy(state);
+    // return pointer to previous state
+    return previous;
+}
 
 /// Structure to hold event handlers pointers
 const EventsHandler = struct {
@@ -454,9 +512,11 @@ pub fn ZaxParser() type {
         options: Options = .{ .strict = false },
         namespaces: std.ArrayList(Namespace),
         state: *State,
-        charBuffer: std.ArrayList(u8),
-        attributesBuffer: std.ArrayList(Attribute),
-        namespacesBuffer: std.ArrayList(Namespace),
+        textBuffer: std.ArrayList(u8),
+        attributeBuffer: std.ArrayList(u8),
+        tagBuffer: std.ArrayList(u8),
+        openingTag: OpeningTag,
+        closingTag: ClosingTag,
 
         pub fn init(self: Self, events: EventsHandler, alloc: std.mem.Allocator) Self {
             _ = self;
@@ -468,7 +528,9 @@ pub fn ZaxParser() type {
                     .previous = null,
                     .content = TokenizerData{ .text = std.ArrayList(u8).init(alloc) },
                 },
-                .charBuffer = std.ArrayList(u8).init(alloc),
+                .textBuffer = std.ArrayList(u8).init(alloc),
+                .attributeBuffer = std.ArrayList(u8).init(alloc),
+                .tagBuffer = std.ArrayList(u8).init(alloc),
             };
         }
 
@@ -485,7 +547,7 @@ pub fn ZaxParser() type {
             }
             // release all namespaces
             self.namespaces.deinit();
-            self.charBuffer.deinit();
+            self.textBuffer.deinit();
         }
 
         // Parsing algorithm
@@ -537,30 +599,27 @@ pub fn ZaxParser() type {
                                     self.state.text.clear();
                                 }
                                 // default : create a new tag state pointer
-                                const newState: *State = self.allocator.create(State){
-                                    .previous = &(self.state), // point to current state
-                                    .content = .{
+                                self.state = newState(
+                                    &(self.state),
+                                    .{
                                         .tag = std.ArrayList(u8).init(self.alloc),
                                     },
-                                };
-                                // update current state pointer
-                                self.state = newState;
-                                self.charBuffer.clearRetainingCapacity();
-                                self.charBuffer.append(char);
+                                    self.allocator,
+                                );
                             },
                             '&' => {
-                                // default : create a new entity state
-                                const newState: *State = self.allocator.create(State){
-                                    .previous = &(self.state),
-                                    .content = .{
+                                self.state = newState(
+                                    &(self.state),
+                                    .{
                                         .entity = std.ArrayList(u8).init(self.allocator),
                                     },
-                                };
-                                self.state = newState;
-                                self.charBuffer.clearRetainingCapacity();
-                                self.charBuffer.append(char);
+                                    self.allocator,
+                                );
+                                // default : create a new entity state
                             },
-                            else => {},
+                            else => {
+                                self.state.content.text.append(char);
+                            },
                         }
                     },
                     .entity => |e| {
@@ -618,6 +677,13 @@ pub fn ZaxParser() type {
                                             }
                                             previous.content.tag.appendSlice("&" ++ e.items ++ ";");
                                         },
+                                        .startTag => {
+                                            if (self.events.OnXMLErrors) |onXMLErrors| {
+                                                onXMLErrors(&self.state, "Entity found in invalid context");
+                                            }
+                                            // revert back the start tag context as a text node
+                                            previous.content.startTag.base.name.appendSlice("&" ++ e.items ++ ";");
+                                        },
                                         .attribute => {
                                             if (self.events.OnXMLErrors) |onXMLErrors| {
                                                 onXMLErrors(&self.state, "Entity found in invalid context");
@@ -634,16 +700,18 @@ pub fn ZaxParser() type {
                                             if (self.events.OnXMLErrors) |onXMLErrors| {
                                                 onXMLErrors(&self.state, "Entity found in invalid context");
                                             }
+                                            // merge back
                                         },
                                     }
-                                    previous.content.entity.deinit();
+
+                                    self.state.content.entity.deinit();
                                     self.allocator.destroy(self.state);
-                                    self.state = previous;
+                                    self.state = popState(self.state, self.allocator);
                                 }
                             },
                             else => {
                                 // add to entity buffer
-                                self.state.entity.append(char);
+                                self.state.content.entity.append(char);
                             },
                         }
                     },
