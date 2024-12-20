@@ -54,16 +54,20 @@ when adding a char to the buffer
 
 initial state is text mode
 For each char of xml file
+
+
    if state is text
-        if char is < : 
+        if char is <
             if buffer is not empty
                 emit a text event with previous buffer content 
                 clear the buffer
             state is now in tag mode
-        else if char is & :
+        else if char is &
             stash state
             state is now in entity validation mode
         add char to the buffer
+
+
     else if state is tag // tag element parsing start by <
         add char to the buffer
         if buffer is `<?`
@@ -87,6 +91,16 @@ For each char of xml file
                 if strict fail
                 else
                     state is now text
+        if char is /
+            tag is alledgedly a selfclosing name tag without space or attribute in it
+            validate naming
+            if name is valid
+                selfclosing tag = true
+                state is OpeningTag
+            else 
+                error event with UNAUTHORIZED_TAGSTART_CHAR
+                if strict mode : fail
+                else state is now text
         if char is >
             tag is alledgedly a name tag without space or attribute in it
             validate naming
@@ -106,7 +120,7 @@ For each char of xml file
                 else 
                     emit a warning event with buffer and position
             tagPrefixEnd = buffer lenght
-        else if char is not in (! or ":" or `[` or [A-Z] or "_" or [a-z] or [#xC0-#xD6] 
+        else if char is not in (/ or ! or ":" or `[` or [A-Z] or "_" or [a-z] or [#xC0-#xD6] 
                 or [#xD8-#xF6] or [#xF8-#x2FF] or [#x370-#x37D] 
                 or [#x37F-#x1FFF] or [#x200C-#x200D] or [#x2070-#x218F] 
                 or [#x2C00-#x2FEF] or [#x3001-#xD7FF] or [#xF900-#xFDCF] 
@@ -114,38 +128,124 @@ For each char of xml file
             error event with UNAUTHORIZED_TAGSTART_CHAR
             if strict mode, fail  :
             else state is now text
+
+
     else if state is Comment
         add char to the buffer
         if buffer ends with `-->`
             emit event Comment
             clear buffer
             state is now text
-    else if state is PI // 
-        if char is a space
-            if buffer is empty : (space after the opening '<?')
-                event error + fail zith INVALID_PI_TARGET error
-            else if PI target separator is 0
-                keep buffer length in PI target separator
-            else add char to buffer
-        else if char is '>'
-            if buffer is not ending with ?
-                add char to buffer
-            else if buffer content is longer than 1
-                if PI target separator is 0
-                    PI target separator is current buffer
-                else 
-                    rest of content is pi content
-                emit PI event with corresponding slices of the buffer
+
+
+    else if state is CDATA
+        add char to the buffer
+        if buffer ends with `]]>`
+            emit event CDATA
+            clear buffer
+            state is now text
+
+
+    else if state is PI
+        add char to buffer
+        if buffer ends with `?>`
+            if PITarget is 0
+                event error with INVALID_PI_TARGET
+            else 
+                emit PI event
                 clear buffer
                 state is now text
-            else event error + fail zith INVALID_PI_EMPTY_TARGET error
-        else if char is in [#x1-#xD7FF] or [#xE000-#xFFFD] or [#x10000-#x10FFFF]
-            add char to buffer
-        else
-            if stric mode : error envent + fail INVALID_XML_CHARACTER
+        if char is a space
+            if buffer - 1 contains `<?`
+                event error with INVALID_PI_TARGET
+                if strict mode : fail
+            else if PITargetEnd = 0
+                PITargetEnd = buffer length
+        else if char is not in [#x1-#xD7FF] or [#xE000-#xFFFD] or [#x10000-#x10FFFF]
+            error event INVALID_XML_CHARACTER
+            if strict mode : fail
+
+
+    else if state is OpeningTag // Buffer should contains <prefix:name or <prefix:name/
+        add char to buffer
+        // In this state, we already have the name validated by the text mode parser
+        if buffer ends with '/>'
+            if lastAttributeNameStart > 0 && lastAttributeNameEnd == 0
+                emit event error INVALID_CHAR_IN_ATTRIBUTE_NAME
+                if strict mode : fail
             else
-                warning event with buffer and position 
-                add char to buffer
+                emit OpeningTag (selfclosing) event            
+                clear buffer
+                state is now text
+        if selfclosing
+            emit event error INVALID_CHAR_IN_TAG
+            if strict mode : fail
+            else state is now text
+        if char is ':'  
+            if lastAttributePrefixSeparator > 0
+                emit error INVALID_CHAR_IN_ATTRIBUTE
+                if strict mode fail
+                else
+                    state is now text
+            if lastAttributeNameStart == 0
+                emit error event and fail with error "EMPTY_PREFIX_NOT_ALLOWED_WITH_NAMESPACES"
+                if strict mode, fail
+                lastAttributePrefixSeparator = buffer.length
+            else if lastAttributeNameStart > 0 && lastAttributeNameEnd == 0
+                lastAttributePrefixSeparator = buffer.length
+        if char is '/'
+            if lastAttributeNameStart > 0 && lastAttributeNameEnd == 0
+                    or lastAttributeNameEnd > 0 and lastAttributeValueStart == 0
+                emit event error INVALID_CHAR_IN_ATTRIBUTE
+                if strict mode : fail
+                state is now text
+            else if lastAttributeValueStart > 0 and lastAttributeValueEnd = 0
+                authorized
+            else
+                selfclosing = true
+        if char is " or '
+            if lastAttributeValueStart > 0  and char at lastAttributeValueStart is same char
+                lastAttributeValueEnd = buffer length
+                stash attribute name start, lastAttributePrefixSeparator, attribute name end, attribute value start, attribute value end
+                reset those counter to 0
+            if lastAttributeNameEnd > 0 && lastAttributeValueStart == 0
+                lastAttributeValueStart = buffer length
+            if lastAttributeNameEnd == 0 
+                emit event error INVALID_CHAR_IN_TAG
+                if strict mode : fail
+                else state is now text
+        if char is >
+            if lastAttributeNameStart > 0 && lastAttributeNameEnd == 0
+                    or lastAttributeNameEnd > 0 and lastAttributeValueStart == 0
+                emit event error INVALID_CHAR_IN_ATTRIBUTE
+                if strict mode : fail
+                state is now text
+            else if lastAttributeValueStart > 0 and lastAttributeValueEnd = 0
+                authorized
+            else
+                emit OpeningTag event
+                clear buffer
+                clear attributes indexes and stash
+                state is now text
+        if char is =
+            if previous char is :
+                emit event error INVALID_CHAR_IN_ATTRIBUTE
+                if strict mode : fail
+                state is now text
+            if lastAttributeNameStart > 0
+                lastAttributeNameEnd = buffer lenght
+            if lastAttributeValueStart > 0 && lastAttributeValueEnd == 0
+                authorized
+            else 
+                emit event error INVALID_CHAR_IN_ATTRIBUTE
+                if strict mode : fail
+                state is now text
+        // TODO : RESUME CONCEPTION HERE
+        if char is in Name category
+            if lastAttributeNameStart = 0 
+
+
+
     else if state is Doctype //buffer should contain `<!DOCTYPE `rootName (SYSTEM or PUBLIC PublicId) SystemId ([DoctypSubset?])? >
         add char to buffer // default if returning to text mode
         if char is >
