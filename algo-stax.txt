@@ -1,0 +1,299 @@
+considering stax over sax for now : i might use the stax parser to create a sax version later, by keeping track
+somehow of the node tree to provide more validation mechanism (like checking that a tag is properly closed)
+
+Parser is based on a state machine, with a fixed size parsing buffer that default 16kb but could be set to a custom size by the parser user
+
+An idea for loose mode : have an "invalid tag" state to allow the parser to recover on invalid element like
+    - malformed PI or Prolog
+    - malformed doctype
+    - malformed opening tag 
+    - malformed closing tag
+The idea is that when the malformed tag is closed, the parser can recover in text parsing state, while raising an
+error event that would give a more precise error, possibly with start and end positions in the parsed buffer
+(I might need to add a "parsing index" to be set when opening a new element to keep track of the element start)
+
+this could be bind to a new event OnInvalidTag that would convert any of 
+
+when parsing opening or closing named tag
+parser should keep track of the position of a possible namespace separator to extract prefix from
+for each attribute,
+    parser should keep track of 
+        name start and end position in the analysis buffer
+        possibly namespace separator
+        delimiter char
+        delimiter start
+        delimiter end
+
+For the doctype with subset, parser should keep track of the number of opened bracket
+note : i need to check if i can have bracket in doctype subset dtd values
+
+Parser can emit events, that is, execute function callback on specific state of the parser
+the list of event i consider are
+- Emit an event when an opening named tag node is finalised (`<nametag  [attribute="something" or attribute='something']* >`)
+- Emit an event when an closing named tag node is finalised (`</nametag>`)
+- Emit an even when text node is finished (between `>` and `<`)
+  - on loose mode, if unescaped `<` is found on text mode but it's followed by a space, it is considered as a text character
+  - in strict, it is considered malformed
+- Emit an event when a PI node is finalised (`<?target AnyContentButPIEnding 
+- Emit an event when a DOCTYPE node is finalised (`<!DOCTYPE rootName .....>`)
+- Emit an event when a Comment node is finalised (`<!--.....-->`)
+- Emit an event when a CDATA node is finalised (`<![CDATA[.....]]>`)
+if namespace handling is activated
+- Emit an event when a namespace is declaration is found (attribute xmlns:prefix='uri' or "uri" found while parsing an opening tag)
+
+things i'm not sure of :
+should I decode entity during parsing or should i keep them as-is and provide a 
+when adding a char to the buffer
+    - I need to check if there is enough memory available
+    - I might need to raise warnings on discouraged characters
+    - If a prolog is present in the document with version number
+        - if the character is not authorized by the xml version
+            emit error event with INVALID_XML_CHAR
+            if strict fail
+
+
+initial state is text mode
+For each char of xml file
+   if state is text
+        if char is < : 
+            if buffer is not empty
+                emit a text event with previous buffer content 
+                clear the buffer
+            state is now in tag mode
+        else if char is & :
+            stash state
+            state is now in entity validation mode
+        add char to the buffer
+    else if state is tag // tag element parsing start by <
+        add char to the buffer
+        if buffer is `<?`
+            state is now PI
+        if buffer starts with `<!DOCTYPE` and char is any space
+            state is now doctype
+        if buffer is `<!--`
+            state is now comment
+        if buffer is `<![CDATA[`
+            state is now cdata
+        if buffer is `</`
+            state is now ClosingTag
+        if char is a space
+            tag is alledgedly a named tag
+            validate naming
+            if name is valid
+                tagNameEnd = buffer lenght
+                state is now OpeningTag
+            else tag name is invalid
+                emit an error event INVALID_TAG_NAME
+                if strict fail
+                else
+                    state is now text
+        if char is >
+            tag is alledgedly a name tag without space or attribute in it
+            validate naming
+            if name is valid
+                emit an opening tag event
+                clear buffer
+                state is now text
+        if char is '-' and  buffer is not `<!`
+            in strict mode, 
+            error event with UNAUTHORIZED_TAGSTART_CHAR
+            if stritc mode, fail
+            else state is now text
+        if char is ':' and namespaces handling is activated in the options
+            if buffer contains only `<`
+                if strict mode is activated
+                    emit error event and fail with error "EMPTY_PREFIX_NOT_ALLOWED_WITH_NAMESPACES"
+                else 
+                    emit a warning event with buffer and position
+            tagPrefixEnd = buffer lenght
+        else if char is not in (! or ":" or `[` or [A-Z] or "_" or [a-z] or [#xC0-#xD6] 
+                or [#xD8-#xF6] or [#xF8-#x2FF] or [#x370-#x37D] 
+                or [#x37F-#x1FFF] or [#x200C-#x200D] or [#x2070-#x218F] 
+                or [#x2C00-#x2FEF] or [#x3001-#xD7FF] or [#xF900-#xFDCF] 
+                or [#xFDF0-#xFFFD] or [#x10000-#xEFFFF])
+            error event with UNAUTHORIZED_TAGSTART_CHAR
+            if strict mode, fail  :
+            else state is now text
+    else if state is Comment
+        add char to the buffer
+        if buffer ends with `-->`
+            emit event Comment
+            clear buffer
+            state is now text
+    else if state is PI // 
+        if char is a space
+            if buffer is empty : (space after the opening '<?')
+                event error + fail zith INVALID_PI_TARGET error
+            else if PI target separator is 0
+                keep buffer length in PI target separator
+            else add char to buffer
+        else if char is '>'
+            if buffer is not ending with ?
+                add char to buffer
+            else if buffer content is longer than 1
+                if PI target separator is 0
+                    PI target separator is current buffer
+                else 
+                    rest of content is pi content
+                emit PI event with corresponding slices of the buffer
+                clear buffer
+                state is now text
+            else event error + fail zith INVALID_PI_EMPTY_TARGET error
+        else if char is in [#x1-#xD7FF] or [#xE000-#xFFFD] or [#x10000-#x10FFFF]
+            add char to buffer
+        else
+            if stric mode : error envent + fail INVALID_XML_CHARACTER
+            else
+                warning event with buffer and position 
+                add char to buffer
+    else if state is Doctype //buffer should contain `<!DOCTYPE `rootName (SYSTEM or PUBLIC PublicId) SystemId ([DoctypSubset?])? >
+        add char to buffer // default if returning to text mode
+        if char is >
+            if DoctypSubsetEnd > 0 :
+                emit doctype event with the corresponding slices
+                clear buffer
+                state is now text
+            if DoctypeSubsetStart > 0 :
+                decrement opening tag counter
+                if counter is negative
+                    emit error event INVALID_CHAR_IN_DOCTYPE
+                    if strict fail
+                    else 
+                        state is now text
+            if SystemIdEnd > 0 :
+                emit error event INVALID_CHAR_IN_DOCTYPE
+                if strict : fail
+                else
+                    state is now text
+            if SystemIdStart > 0
+                authorized
+            if  publicIdEnd > 0
+                emit error event INVALID_CHAR_IN_DOCTYPE
+                if strict : fail
+                else 
+                    state is now text
+            if publicIdStart > 0
+                authorized
+            else // we are either in root or doctype type
+                emit error event INVALID_CHAR_IN_DOCTYPE
+                if strict : fail
+                else
+                    state is now text
+        if char is space
+            if doctypeTypeStart > 0
+                doctypeTypeEnd = buffer length
+                if buffer does not end with PUBLIC or SYSTEM
+                    emit error event INVALID_DOCTYPE_TYPE
+                    if strict : fail
+                    else
+                        prepend buffer with doctype tag
+                        state is now text
+            if rootnameStart > 0
+                rootnameEnd = buffer length
+        if char is " or '
+            if doctypeSubsetEnd > 0 : 
+                emit error event INVALID_CHAR_IN_DOCTYPE
+                if strict : fail
+                else
+                    state is now text
+            if doctypeSubsetStart > 0 :
+                nothing
+            if SystemIdEnd > 0
+                emit error event INVALID_CHAR_IN_DOCTYPE
+                if strict : fail
+                else
+                    state is now text
+            if SystemIdStart > 0 :
+                if SystemIdStart is the same char
+                    SystemIdEnd = buffer length
+            if doctypeType is "PUBLIC"
+                if publicIdEnd > 0
+                    if buffer does end by a space
+                        emit an error event MISSING_SPACE_IN_DOCTYPE
+                        if strict fail
+                    SystemIdStart = buffer length
+                if publicIdStart > 0 :
+                    if publicIdStart is the same char
+                        publicIdEnd = buffer length
+            if doctypeTypeEnd > 0
+                if doctype is "PUBLIC"
+                    publicIdStart = buffer length
+                else if doctype is "SYSTEM"
+                    systemIdStart = buffer length
+            else 
+                emit an error event INVALID_CHAR_IN_DOCTYPE
+                if strict fail
+        if char is `[`
+            if doctypeSubsetEnd > 0
+                emit an error event INVALID_CHAR_IN_DOCTYPE
+                if strict fail
+                else 
+                    state is now text
+            if doctypeSubsetStart > 0
+                increment bracket counter
+            if SystemIdEnd > 0
+                doctypeSubsetStart = buffer length
+                bracket counter set to 0
+            if SystemIdStart > 0
+            if PublicIdEnd > 0
+                emit an error event INVALID_CHAR_IN_DOCTYPE
+                if strict fail
+                else 
+                    state is now text
+            if PublicIdStart > 0
+            else 
+                emit an error event INVALID_CHAR_IN_DOCTYPE
+                if strict fail
+                else 
+                    state is now text
+        if char is `]` // for doctype subset
+            if doctypeSubsetEnd > 0
+                emit an error event INVALID_CHAR_IN_DOCTYPE
+                if strict fail
+                else 
+                    state is now text
+            if doctypeSubsetStart > 0
+                if bracket counter is 0
+                    doctypeSubsetEnd = buffer length
+                else 
+                    decrement bracket counter
+            if SystemIdEnd > 0
+                doctypeSubsetStart = buffer length
+            if SystemIdStart > 0
+            if PublicIdEnd > 0
+                emit an error event INVALID_CHAR_IN_DOCTYPE
+                if strict fail
+                else 
+                    state is now text
+            if PublicIdStart > 0
+            else 
+                emit an error event INVALID_CHAR_IN_DOCTYPE
+                if strict fail
+                else 
+                    state is now text
+        if char is `<` // for doctype subset
+            if doctypeSubsetEnd > 0
+                emit an error event INVALID_CHAR_IN_DOCTYPE
+                if strict fail
+                else 
+                    state is now text
+            if doctypeSubsetStart > 0
+                increment bracket counter
+            if SystemIdEnd > 0
+                doctypeSubsetStart = buffer length
+            if SystemIdStart > 0
+                authorized
+            if PublicIdEnd > 0
+                emit an error event INVALID_CHAR_IN_DOCTYPE
+                if strict fail
+                else 
+                    state is now text
+            if PublicIdStart > 0
+                authorized
+            else 
+                emit an error event INVALID_CHAR_IN_DOCTYPE
+                if strict fail
+                else 
+                    state is now text
+
+
