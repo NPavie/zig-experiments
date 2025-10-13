@@ -4,10 +4,34 @@ const std = @import("std");
 const unicode = std.unicode;
 const testing = std.testing;
 
+// Notes pour implementation d'un selecteur de version (demande a chatgpt de résumé les différences entre les version 1.1 et 1.0 de la specification XML )
+// Les spécifications du format XML 1.1 ont introduit quelques changements par rapport à la version 1.0 pour résoudre des problèmes liés à l'utilisation internationale et à la compatibilité avec d'autres standards. Voici les principales différences entre XML 1.0 et XML 1.1 :
+//
+// 1. Jeu de caractères
+// XML 1.1 élargit la gamme des caractères autorisés dans les noms (comme les noms d'éléments et d'attributs). Cela inclut des caractères supplémentaires provenant des langues écrites récemment codifiées dans Unicode.
+// Les restrictions sur les caractères de contrôle ont été assouplies dans XML 1.1 :
+// Certains caractères de contrôle non imprimables (U+0001 à U+001F) sont désormais autorisés, à condition qu'ils soient représentés en tant qu'entités de caractère (par exemple, &#x1F;).
+// Cela permet une meilleure prise en charge des systèmes qui utilisent ces caractères dans des données encodées.
+// 2. Nouvelle gestion des retours à la ligne
+// XML 1.1 a introduit une normalisation plus stricte des caractères de fin de ligne.
+// Tous les caractères de saut de ligne (U+000D CR, U+000A LF et U+0085 NEL) sont normalisés en U+000A (LF) lors du traitement.
+// Cela permet une meilleure compatibilité entre différentes plateformes, notamment celles qui utilisent des conventions de fin de ligne différentes.
+// 3. Compatibilité descendante
+// XML 1.1 a été conçu pour être largement compatible avec XML 1.0. Cependant, les documents XML 1.1 ne sont pas toujours interprétables par des processeurs XML conformes uniquement à XML 1.0.
+// Les documents doivent explicitement déclarer leur version dans la déclaration XML :
+// Exemple pour XML 1.1 : <?xml version="1.1"?>.
+// 4. Utilisation des caractères Unicode mis à jour
+// XML 1.1 suit une version plus récente du standard Unicode (Unicode 3.1 ou ultérieur à l'époque de sa publication). Cela inclut un plus grand nombre de caractères disponibles pour les documents.
+// 5. Manipulation des caractères interdits
+// XML 1.1 a également resserré ou clarifié certaines règles concernant les caractères explicitement interdits (par exemple, U+0000 reste interdit sauf s'il est encodé comme une entité de caractère).
+// En résumé :
+// XML 1.1 est une évolution mineure qui vise à améliorer l'internationalisation et la portabilité, en assouplissant certaines contraintes sur les caractères tout en maintenant une compatibilité relative avec XML 1.0. Cependant, il n'a pas été largement adopté en raison de la stabilité et de la popularité de XML 1.0.
+
 // XML 1.1 defined entities
 // document = ( prolog element Misc* ) - ( Char* RestrictedChar Char* )
 // Char : [#x1-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
 // RestrictedChar = [#x1-#x8] | [#xB-#xC] | [#xE-#x1F] | [#x7F-#x84] | [#x86-#x9F]
+//              = char de control , vtab et formfeed, char de contol, + d'autres champ unicode
 // Discouraged character = [#x1-#x8], [#xB-#xC], [#xE-#x1F], [#x7F-#x84], [#x86-#x9F], [#xFDD0-#xFDDF],
 //                         [#x1FFFE-#x1FFFF], [#x2FFFE-#x2FFFF], [#x3FFFE-#x3FFFF],
 //                         [#x4FFFE-#x4FFFF], [#x5FFFE-#x5FFFF], [#x6FFFE-#x6FFFF],
@@ -46,6 +70,7 @@ const testing = std.testing;
 // CDEnd = ']]>'
 
 // prolog = XMLDecl Misc* (doctypedecl Misc*)?
+// Note : en 1.0, XMLDecl est optionnel
 // XMLDecl = '<?xml' VersionInfo EncodingDecl? SDDecl? S? '?>'
 // VersionInfo = S 'version' Eq ("'" VersionNum "'" | '"' VersionNum '"')
 // Eq = S? '=' S?
@@ -61,7 +86,17 @@ const testing = std.testing;
 // extSubsetDecl = ( markupdecl | conditionalSect | DeclSep)*
 
 // STag	= '<' Name (S Attribute)* S? '>'
-//
+// Attribute = Name Eq AttValue
+// AttValue = '"' ([^<&"] | Reference)* '"' |  "'" ([^<&'] | Reference)* "'"
+
+// IsPEReference = '%' Name ';'
+// Reference = EntityRef | CharRef
+// EntityRef =  '&' Name ';'
+// CharRef = '&#' [0-9]+ ';' | '&#x' [0-9a-fA-F]+ ';'
+// ETag	= '</' Name S? '>'
+
+//	ExternalID	   ::=   	'SYSTEM' S SystemLiteral | 'PUBLIC' S PubidLiteral S SystemLiteral
+//   	NDataDecl	   ::=   	S 'NDATA' S Name
 
 // Constraints explicited in specifications :
 // - Validity constraint = The Name in the document type declaration must match the element type of the root element.
@@ -74,6 +109,12 @@ const testing = std.testing;
 // (This does not apply to references that occur in external parameter entities or to the external subset.)
 // - Well-formedness = The external subset, if any, must match the production for extSubset.
 // - Well-formedness = The replacement text of a parameter entity reference in a DeclSep must match the production extSubsetDecl.
+
+// Si je reprend ce que j'ai vu sur d'autres parseur
+// pour chaque sous block de XML, ils ont une fonction qui vérifie puis parse du contenu
+// Par exemple, en state "Empty"/"DocStart", on appelle une fonction parseXMLDecl
+// qui cherche le texte
+
 
 const ENTITIES = std.StaticStringMap(u32).initComptime(.{
     .{ "amp", '&' },
@@ -331,18 +372,14 @@ const ENTITIES = std.StaticStringMap(u32).initComptime(.{
     .{ "diams", 9830 },
 });
 
-fn unicodeToString(u: u32) ![]const u8 {
-    var buffer: [5]u8 = undefined;
-    const len = unicode.encodeRune(u, buffer[0..]);
-    return buffer[0..len];
-}
-
 /// Zax options
-const Options = struct {
+const ParserOptions = struct {
     /// Strict mode : abort on invalid xml detection
     strict: ?bool = false,
     /// Preserve entities : do not decode entities in the text when raising text events
-    preserveEntities: ?bool = false,
+    preserve_entities: ?bool = false,
+    /// Raw string : do not decode utf8 characters
+    rawstring: ?bool = false,
 };
 
 /// XML Namespace definition
@@ -389,6 +426,19 @@ const Doctype = struct {
     subset: ?std.ArrayList(u8),
 };
 
+/// Slice position within the buffer
+const BufferSlice = struct {
+    start: usize,
+    end: usize,
+};
+
+// Parsing xml
+// FOr each char in the content
+// text
+// If text and < we start a tag
+// if tag and > we end a tag
+//
+
 // Ideas
 // For the status evaluation,
 // consider buffering until some separator is found (any space or < or > or & or ; ir " or ')
@@ -409,29 +459,32 @@ const TokenizerData = union(enum) {
     cdata: std.ArrayList(u8), // <![CDATA[ + content + ]]>
 };
 
-// const TokenizerStatus = enum {
-//     text,
-//     entity,
-//     tag,
-//     startTag,
-//     endTag,
-//     attribute,
-//     attributeValue,
-//     doctype,
-//     doctypeSubset,
-//     comment,
-//     processingInstruction,
-//     cdata,
-// };
+const TokenizerStatus = enum {
+    text, // parser is handling text data
+    entity, // Parser is currently handling entity, should start when & is found and end when ; is found
+    tag, // Parser is handling any type of tag and continue until a delimiter is found
+    startTag, // Parser was in tag state and found
+    endTag,
+    attribute,
+    attributeValue,
+    doctype,
+    doctypeSubset,
+    comment,
+    processingInstruction,
+    cdata,
+};
+
+const XMLTokenizerError = error{
+    XMLInvalidCharacterInTag,
+    XMLInvalidCharacterInDoctype,
+    MLInvalidDoctypeType,
+};
 
 const State = struct {
-    content: TokenizerData = undefined,
-    //status: TokenizerStatus = TokenizerStatus.text,
-    previous: ?*State = null, // for linked list to previous state
+    content: TokenizerStatus = TokenizerStatus.text,
     line: usize = 0,
     column: usize = 0,
-    // idea : compute an xpath expression while computing the state
-    //xpath: std.ArrayList(u8) = undefined, // XPATH path of currently parsed element
+    previous: ?*State = null, // for linked list to previous state
 };
 
 fn newState(previous: *State, content: TokenizerData, alloc: std.mem.Allocator) *State {
@@ -475,260 +528,195 @@ fn popState(state: *State, alloc: std.mem.Allocator) *State {
     return previous;
 }
 
-/// Structure to hold event handlers pointers
+const Cursor = struct {
+    line: usize,
+    column: usize,
+};
+
+const SelectionRange = struct {
+    start: Cursor,
+    end: Cursor,
+};
+
+/// Structure to hold event handlers pointers for the tokenizer
 const EventsHandler = struct {
     // Start the parser
-    OnStart: ?*fn () void = undefined,
-    OnSGMLDeclaration: ?*fn () void = undefined,
+    OnDocumentStart: ?*fn () void = undefined,
     OnDocumentEnd: ?*fn () void = undefined,
-    OnOpeningTag: ?*fn (tag: *OpeningTag) void = undefined,
-    OnClosingTag: ?*fn (tag: *ClosingTag) void = undefined,
-    OnDoctypeStarted: ?*fn () void = undefined,
+    // Handle the opening of a named tag
+    OnOpeningTagStart: ?*fn (name: []const u21, prefixEnd: usize) void = undefined,
+    // Handle attribute name
+    OnAttributeName: ?*fn (name: []const u21, prefixEnd: usize) void = undefined,
+    // Handle attribute value
+    OnAttributeValueStart: ?*fn (delimiter: u21) void = undefined,
+    OnAttributeValueContent: ?*fn (content: []const u21) void = undefined,
+    OnAttributeValueEnd: ?*fn () void = undefined,
+    // Handle the closing of a named tag (including if it is selfclosing)
+    OnOpeningTagEnd: ?*fn (selfclosing: bool) void = undefined,
+    // Handle the closing of a named tag
+    OnClosingTag: ?*fn (name: []const u21, prefixEnd: u32) void = undefined,
+    // Handle doctype main part
     OnDoctype: ?*fn (doctype: *Doctype) void = undefined,
-    OnDoctypeEnded: ?*fn () void = undefined,
-    OnCommentStarted: ?*fn () void = undefined,
-    OnComment: ?*fn (text: []const u8) void = undefined,
-    OnCommentEnded: ?*fn () void = undefined,
+    // Handle doctype subset
+    OnDoctypeSubsetStart: ?*fn () void = undefined,
+    OnDoctypeSubsetContent: ?*fn (content: []const u21) void = undefined,
+    OnDoctypeSubsetEnd: ?*fn () void = undefined,
+    // Handle comment
+    OnCommentStart: ?*fn () void = undefined,
+    OnCommentContent: ?*fn (content: []const u21) void = undefined,
+    OnCommentEnd: ?*fn () void = undefined,
     // Handle cdata
     OnCDATAStart: ?*fn () void = undefined,
-    OnCDATA: ?*fn (content: []const u8) void = undefined,
+    OnCDATAContent: ?*fn (content: []const u21) void = undefined,
     OnCDATAEnd: ?*fn () void = undefined,
     // Handle processing instructions
     OnProcessingInstruction: ?*fn (pi: *ProcessingInstruction) void = undefined,
+    OnProcessingInstructionStart: ?*fn () void = undefined,
+    OnProcessingInstructionContent: ?*fn () void = undefined,
+    OnProcessingInstructionEnd: ?*fn () void = undefined,
     // Handle text nodes
-    OnText: ?*fn (text: []const u8) void = undefined,
-    OnXMLErrors: ?*fn (state: *State, message: []const u8) void = undefined,
-    OnXMLWarnings: ?*fn (state: *State, message: []const u8) void = undefined,
+    OnText: ?*fn (text: []const u21) void = undefined,
+    OnXMLErrors: ?*fn (xmlError: XMLTokenizerError, message: []const u21) void = undefined,
 };
 
-pub fn ZaxParser() type {
-    // const gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    // const allocator = gpa.allocator();
+fn utf8Size(char: u8) u8 {
+    if ((char & 0b1000_0000) == 0) {
+        return 1;
+    } else if ((char & 0b1110_0000) == 0b1100_0000) {
+        return 2;
+    } else if ((char & 0b1111_0000) == 0b1110_0000) {
+        return 3;
+    } else if ((char & 0b1111_1000) == 0b1111_0000) {
+        return 4;
+    } else {
+        return 0;
+    }
+}
+
+fn isUtf8Part(char: u8) bool {
+    return (char & 0b1100_0000) == 0b1000_0000;
+}
+
+/// Zax tokenizer to parse xml content with a fixed size buffer
+///
+/// buffer_size : number of characters utf8 to bufferize
+///
+/// events : event handlers for the parser
+pub fn ZaxTokenizer(buffer_size: comptime_int, events: EventsHandler, options: ParserOptions) type {
     return struct {
         const Self = @This();
-        allocator: std.mem.Allocator,
         // Empty event handlers with no event handlers
-        events: EventsHandler = .{},
-        options: Options = .{ .strict = false },
-        namespaces: std.ArrayList(Namespace),
-        state: *State,
-        textBuffer: std.ArrayList(u8),
-        attributeBuffer: std.ArrayList(u8),
-        tagBuffer: std.ArrayList(u8),
-        openingTag: OpeningTag,
-        closingTag: ClosingTag,
-
-        pub fn init(self: Self, events: EventsHandler, alloc: std.mem.Allocator) Self {
-            _ = self;
-            return .{
-                .allocator = alloc,
-                .events = events,
-                .namespaces = std.ArrayList(Namespace).init(alloc),
-                .state = alloc.create(State){
-                    .previous = null,
-                    .content = TokenizerData{ .text = std.ArrayList(u8).init(alloc) },
-                },
-                .textBuffer = std.ArrayList(u8).init(alloc),
-                .attributeBuffer = std.ArrayList(u8).init(alloc),
-                .tagBuffer = std.ArrayList(u8).init(alloc),
-            };
-        }
-
-        pub fn deinit(self: Self) void {
-            // release all resources
-            while (self.state) |currentState| {
-                const previous = currentState.previous;
-                // clean content and xpath arrays
-                currentState.content.?.deinit();
-                currentState.xpath.deinit();
-                // clean the rest of the state
-                self.allocator.destroy(currentState);
-                self.state = previous;
-            }
-            // release all namespaces
-            self.namespaces.deinit();
-            self.textBuffer.deinit();
-        }
-
-        // Parsing algorithm
-        // for each char
-        //  add the char to the buffer
-        // if char is a delimiter
-        //  based on the current state,
-        //    process the buffer content
-        //    send the event if the state has changed
-        //  reset the buffer
-
+        events: EventsHandler = events,
+        options: ParserOptions = options,
+        charBuffer: [4]u8 = [_]u8{ 0, 0, 0, 0 },
+        charBufferLen: u8 = 0,
+        parsedChar: u21 = 0,
+        parserBuffer: [buffer_size]u21 = [_]u21{0} ** buffer_size,
+        parserBufferLen: usize = 0,
+        entityBuffer: [10]u21 = [_]u21{0} ** 10, // entity has max 10 characters
+        entityBufferLen: usize = 0,
+        /// previous status of the parser to recover from errors
+        previousStatus: TokenizerStatus = TokenizerStatus.text,
+        /// currente status of the parser
+        status: TokenizerStatus = TokenizerStatus.text,
         /// Parsing xml text
         pub fn parse(self: Self, xmlBytes: []u8) !void {
-            // Algorithm
-            // for each char
-            // if char is <
-            //   if state in [TagStarted,TagWithNamespaceStarted, AttributeStarted,AttributeWithNamespaceStarted => error to report but continue if not strict mode
-            //
-            if (self.state == null) {
-                self.state = self.allocator.create(State){
-                    .previous = null,
-                    .content = TokenizerData{ .text = std.ArrayList(u8).init(self.alloc) },
-                    .line = 0,
-                    .column = 0,
-                };
-                if (self.events.OnStart) |onStart| {
-                    onStart();
-                }
-            }
             for (xmlBytes, 0..) |char, index| {
                 _ = index;
-                // Update line and column
-                if (char == '\n') {
-                    self.state.line += 1;
-                    self.state.column = 0;
+                if (self.options.rawstring) {
+                    self.charToParse = char;
+                    self.charIsComplete = true;
+                } else if (self.charToParse == 0) {
+                    self.charToParse = char;
+                    self.remainingCharCode = unicode.utf8ByteSequenceLength(char) - 1;
+                    if (self.remainingCharCode == -1) {
+                        //raise an utf8 decoding error event
+                        if (self.events.OnXMLErrors) |onXMLErrors| {
+                            onXMLErrors(&self.state, "Invalid UTF8 character");
+                        }
+                        self.options.rawstring = true;
+                        //fallback to raw ascii parsing or replace the char by U+FFFD
+                        //remaining = 0
+                        self.remainingCharCode = 0;
+                        self.charToParse = 0xFFFD;
+                    }
                 } else {
-                    self.state.column += 1;
+                    if (isUtf8Part(char)) {
+                        self.charToParse = (self.charToParse << 8) | char;
+                        self.remainingCharCode -= 1;
+                    } else {
+                        //raise an utf8 decoding error event
+                        if (self.events.OnXMLErrors) |onXMLErrors| {
+                            onXMLErrors(&self.state, "Invalid UTF8 character");
+                        }
+                        self.options.rawstring = true;
+                        //fallback to raw ascii parsing or replace the char by U+FFFD
+                        //remaining = 0
+                        self.remainingCharCode = 0;
+                        self.charToParse = 0xFFFD;
+                    }
                 }
-                switch (self.state.content) {
-                    .text => |t| {
-                        switch (char) {
-                            '<' => {
-                                if (t.items.len > 0) {
-                                    // raise text event
-                                    if (self.events.OnText) |onText| {
-                                        onText(self.state.text.items);
-                                    }
-                                    // reset text buffer
-                                    self.state.text.clear();
-                                }
-                                // default : create a new tag state pointer
-                                self.state = newState(
-                                    &(self.state),
-                                    .{
-                                        .tag = std.ArrayList(u8).init(self.alloc),
-                                    },
-                                    self.allocator,
-                                );
-                            },
-                            '&' => {
-                                self.state = newState(
-                                    &(self.state),
-                                    .{
-                                        .entity = std.ArrayList(u8).init(self.allocator),
-                                    },
-                                    self.allocator,
-                                );
-                                // default : create a new entity state
-                            },
-                            else => {
-                                self.state.content.text.append(char);
-                            },
-                        }
-                    },
-                    .entity => |e| {
-                        switch (char) {
-                            ';' => {
-                                var codepoints: u32 = 0;
-                                var invalid = false;
-                                if (e.items.len > 3 and std.mem.eql(u8, e.items[0..1], "#x")) {
-                                    // content is alledgedly an hexa code
-                                    // convert hexacode to unicode char
-                                    for (e.items[2..]) |hex| {
-                                        if (hex >= 'a' and hex <= 'z') {
-                                            codepoints = codepoints * 16 + (hex - 'a');
-                                        } else if (hex >= 'A' and hex <= 'Z') {
-                                            codepoints = codepoints * 16 + (hex - 'A');
-                                        } else if (hex >= '0' and hex <= '9') {
-                                            codepoints = codepoints * 16 + (hex - '0');
-                                        } else {
-                                            invalid = true;
-                                            break;
-                                        }
-                                    }
-                                } else if (e.items.?[0] == '#') {
-                                    // content is alledgedly a decimal code
-                                    // convert decimal code to char
-                                    for (e.items[1..]) |dec| {
-                                        if (dec >= '0' and dec <= '9') {
-                                            codepoints = codepoints * 16 + (dec - '0');
-                                        } else {
-                                            invalid = true;
-                                            break;
-                                        }
-                                    }
-                                } else if (ENTITIES.has(e.items.?)) {
-                                    // entity is textual, check in the entities map
-                                    codepoints = ENTITIES.get(self.state.content.?);
-                                } else invalid = true;
-                                var entityText: []const u8 = undefined;
-                                if (invalid) {
-                                    // invalid or unknown entity, transfert entity as is
-                                    entityText = "&" ++ e.items ++ ";";
-                                } else {
-                                    entityText = unicodeToString(codepoints);
-                                }
-                                if (self.state.previous) |previous| {
-                                    switch (previous.content) {
-                                        .text => previous.content.text.appendSlice(entityText),
-                                        .attributeValue => previous.content.attributeValue.appendSlice(entityText),
-                                        .comment => previous.content.comment.appendSlice(entityText),
-                                        .cdata => previous.content.cdata.appendSlice(entityText),
-                                        .processingInstruction => previous.content.cdata.appendSlice(entityText),
-                                        .tag => {
-                                            if (self.events.OnXMLErrors) |onXMLErrors| {
-                                                onXMLErrors(&self.state, "Entity found in invalid context");
-                                            }
-                                            previous.content.tag.appendSlice("&" ++ e.items ++ ";");
-                                        },
-                                        .startTag => {
-                                            if (self.events.OnXMLErrors) |onXMLErrors| {
-                                                onXMLErrors(&self.state, "Entity found in invalid context");
-                                            }
-                                            // revert back the start tag context as a text node
-                                            previous.content.startTag.base.name.appendSlice("&" ++ e.items ++ ";");
-                                        },
-                                        .attribute => {
-                                            if (self.events.OnXMLErrors) |onXMLErrors| {
-                                                onXMLErrors(&self.state, "Entity found in invalid context");
-                                            }
-                                            previous.content.attribute.appendSlice("&" ++ e.items ++ ";");
-                                        },
-                                        .closingTag => {
-                                            if (self.events.OnXMLErrors) |onXMLErrors| {
-                                                onXMLErrors(&self.state, "Entity found in invalid context");
-                                            }
-                                            previous.content.closingTag.appendSlice("&" ++ e.items ++ ";");
-                                        },
-                                        else => {
-                                            if (self.events.OnXMLErrors) |onXMLErrors| {
-                                                onXMLErrors(&self.state, "Entity found in invalid context");
-                                            }
-                                            // merge back
-                                        },
-                                    }
+                if (self.remainingCharCode == 0) {
+                    self.charToParse = try unicode.utf8Decode(self.charToParseBuffer[0..self.charToParseBufferLen]);
 
-                                    self.state.content.entity.deinit();
-                                    self.allocator.destroy(self.state);
-                                    self.state = popState(self.state, self.allocator);
-                                }
-                            },
-                            else => {
-                                // add to entity buffer
-                                self.state.content.entity.append(char);
-                            },
-                        }
-                    },
-                    .tag => {},
-                    .namedTag => {},
-                    .attribute => {},
-                    .attributeValue => {},
-                    .doctype => {},
-                    .doctypeSubset => {},
-                    .closingTag => {},
-                    .comment => {},
-                    .processingInstruction => {},
-                    .cdata => {},
-                    else => undefined,
+                    self.charToParse = 0;
                 }
             }
         }
+
+        fn parseAsText(self: Self, char: u21) !void {
+            if (char == '&') {
+                self.entityBuffer[0] = char;
+                self.entityBufferLen = 1;
+                self.previousStatus = TokenizerStatus.text;
+                self.status = TokenizerStatus.entity;
+            } else if (char == '<') {
+                if (self.parsedBufferLen > 0 and self.events.OnText) |onText| {
+                    onText(self.parserBuffer[0..self.parsedBufferLen]);
+                }
+                self.parserBuffer[0] = char;
+                self.parserBufferLen = 1;
+                self.previousStatus = TokenizerStatus.text;
+                self.status = TokenizerStatus.tag;
+            } else {
+                if (self.parserBufferLen == buffer_size) {
+                    if (self.events.OnText) |onText| {
+                        onText(self.parserBuffer[0..self.parsedBufferLen]);
+                    }
+                    self.parserBufferLen = 0;
+                }
+                self.parserBuffer[self.parserBufferLen] = char;
+                self.parserBufferLen += 1;
+            }
+        }
+        fn parseAsEntity(self: Self, char: u21) !void {
+            if (char == ';') {
+                if (options.preserve_entities) {}
+                self.parserBuffer[self.parserBufferLen] = char;
+                self.parserBufferLen += 1;
+                if (self.events.OnText) |onText| {
+                    onText(self.parserBuffer[0..self.parsedBufferLen]);
+                }
+                self.parserBufferLen = 0;
+                self.previousStatus = TokenizerStatus.entity;
+                self.status = TokenizerStatus.text;
+            } else (self.parsedBufferLen == buffer_size) {
+                if (self.parserBufferLen == buffer_size) {
+                    if (self.events.OnText) |onText| {
+                        onText(self.parserBuffer[0..self.parsedBufferLen]);
+                    }
+                    self.parserBufferLen = 0;
+                }
+                self.parserBuffer[self.parserBufferLen] = char;
+                self.parserBufferLen += 1;
+            }
+        }
+        fn parseAsOpeningTag(self: Self, char: u21) !void {}
+        fn parseAsAttributeName(self: Self, char: u21) !void {}
+        fn parseAsAttributeValue(self: Self, char: u21) !void {}
+        fn parseAsComment(self: Self, char: u21) !void {}
+        fn parseAsPI(self: Self, char: u21) !void {}
+        fn parseAsCDATA(self: Self, char: u21) !void {}
     };
 }
 

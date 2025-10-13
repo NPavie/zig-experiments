@@ -125,6 +125,11 @@ fn parseAsText(char)
         state is now in entity mode
     add char to the buffer
 
+fn parseAttribute(char)
+  if char is =
+  if char is a space
+  if char is / and 
+
 fn parseAsTag(char) 
     add char to the buffer
     if buffer is '<' 
@@ -152,8 +157,10 @@ fn parseAsTag(char)
         tag is alledgedly a named tag
         validate naming
         if name is valid
-            tagNameEnd = buffer lenght
+            
+            tagNameEnd = buffer lenght 
             state is now STag
+            (or emit an OpeningTagStart event, clear buffer and switch to STag state)
         else tag name is invalid
             emit an error event INVALID_TAG_NAME
             if strict fail
@@ -286,6 +293,9 @@ fn parseAsSTag(char)
                 if strict mode : fail
                 state is now text
     if char is in Name category
+        attribute start = buffer length
+        switch to attribute state
+        // to be removed
         if lastAttributeNameStart = 0 
             lastAttributeNameStart = buffer length
         Else if lastAttributeNameEnd > 0 and lastAttributeValueStart = 0
