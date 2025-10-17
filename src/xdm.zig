@@ -107,6 +107,27 @@ pub const DocumentNode = struct {
 
     node: NodeInterface,
 
+    pub fn init() DocumentNode {
+        return .{ .node = NodeInterface{
+            .attributes = attributes,
+            .base_uri = base_uri,
+            .children = children,
+            .document_uri = document_uri,
+            .is_id = is_id,
+            .is_idrefs = is_idrefs,
+            .namespace_nodes = namespace_nodes,
+            .nilled = nilled,
+            .node_kind = node_kind,
+            .node_name = node_name,
+            .parent = parent,
+            .string_value = string_value,
+            .type_name = type_name,
+            .typed_value = typed_value,
+            .unparsed_entity_public_id = unparsed_entity_public_id,
+            .unparsed_entity_system_id = unparsed_entity_system_id,
+        } };
+    }
+
     fn attributes(self: *NodeInterface) []*AttributeNode {
         const _self: *DocumentNode = @fieldParentPtr("node", self);
         _ = _self;
@@ -199,6 +220,27 @@ const ElementNode = struct {
 
     node: NodeInterface,
 
+    pub fn init() ElementNode {
+        return .{ .node = NodeInterface{
+            .attributes = attributes,
+            .base_uri = base_uri,
+            .children = children,
+            .document_uri = document_uri,
+            .is_id = is_id,
+            .is_idrefs = is_idrefs,
+            .namespace_nodes = namespace_nodes,
+            .nilled = nilled,
+            .node_kind = node_kind,
+            .node_name = node_name,
+            .parent = parent,
+            .string_value = string_value,
+            .type_name = type_name,
+            .typed_value = typed_value,
+            .unparsed_entity_public_id = unparsed_entity_public_id,
+            .unparsed_entity_system_id = unparsed_entity_system_id,
+        } };
+    }
+
     fn attributes(self: *NodeInterface) []*AttributeNode {
         const _self: *ElementNode = @fieldParentPtr("node", self);
         _ = _self;
@@ -278,6 +320,27 @@ const AttributeNode = struct {
 
     node: NodeInterface,
 
+    pub fn init() AttributeNode {
+        return .{ .node = NodeInterface{
+            .attributes = attributes,
+            .base_uri = base_uri,
+            .children = children,
+            .document_uri = document_uri,
+            .is_id = is_id,
+            .is_idrefs = is_idrefs,
+            .namespace_nodes = namespace_nodes,
+            .nilled = nilled,
+            .node_kind = node_kind,
+            .node_name = node_name,
+            .parent = parent,
+            .string_value = string_value,
+            .type_name = type_name,
+            .typed_value = typed_value,
+            .unparsed_entity_public_id = unparsed_entity_public_id,
+            .unparsed_entity_system_id = unparsed_entity_system_id,
+        } };
+    }
+
     fn attributes(self: *NodeInterface) []*AttributeNode {
         const _self: *AttributeNode = @fieldParentPtr("node", self);
         _ = _self;
@@ -352,6 +415,27 @@ const NamespaceNode = struct {
     _parent: ?NodeInterface,
 
     node: NodeInterface,
+
+    pub fn init() NamespaceNode {
+        return .{ .node = NodeInterface{
+            .attributes = attributes,
+            .base_uri = base_uri,
+            .children = children,
+            .document_uri = document_uri,
+            .is_id = is_id,
+            .is_idrefs = is_idrefs,
+            .namespace_nodes = namespace_nodes,
+            .nilled = nilled,
+            .node_kind = node_kind,
+            .node_name = node_name,
+            .parent = parent,
+            .string_value = string_value,
+            .type_name = type_name,
+            .typed_value = typed_value,
+            .unparsed_entity_public_id = unparsed_entity_public_id,
+            .unparsed_entity_system_id = unparsed_entity_system_id,
+        } };
+    }
 
     fn attributes(self: *NodeInterface) []*AttributeNode {
         const _self: *NamespaceNode = @fieldParentPtr("node", self);
@@ -429,6 +513,27 @@ const ProcessingInstructionNode = struct {
 
     node: NodeInterface,
 
+    pub fn init() ProcessingInstructionNode {
+        return .{ .node = NodeInterface{
+            .attributes = attributes,
+            .base_uri = base_uri,
+            .children = children,
+            .document_uri = document_uri,
+            .is_id = is_id,
+            .is_idrefs = is_idrefs,
+            .namespace_nodes = namespace_nodes,
+            .nilled = nilled,
+            .node_kind = node_kind,
+            .node_name = node_name,
+            .parent = parent,
+            .string_value = string_value,
+            .type_name = type_name,
+            .typed_value = typed_value,
+            .unparsed_entity_public_id = unparsed_entity_public_id,
+            .unparsed_entity_system_id = unparsed_entity_system_id,
+        } };
+    }
+
     fn attributes(self: *NodeInterface) []*AttributeNode {
         const _self: *ProcessingInstructionNode = @fieldParentPtr("node", self);
         _ = _self;
@@ -503,6 +608,27 @@ const TextNode = struct {
 
     node: NodeInterface,
 
+    pub fn init() TextNode {
+        return .{ .node = NodeInterface{
+            .attributes = attributes,
+            .base_uri = base_uri,
+            .children = children,
+            .document_uri = document_uri,
+            .is_id = is_id,
+            .is_idrefs = is_idrefs,
+            .namespace_nodes = namespace_nodes,
+            .nilled = nilled,
+            .node_kind = node_kind,
+            .node_name = node_name,
+            .parent = parent,
+            .string_value = string_value,
+            .type_name = type_name,
+            .typed_value = typed_value,
+            .unparsed_entity_public_id = unparsed_entity_public_id,
+            .unparsed_entity_system_id = unparsed_entity_system_id,
+        } };
+    }
+
     fn attributes(self: *NodeInterface) []*AttributeNode {
         const _self: *TextNode = @fieldParentPtr("node", self);
         _ = _self;
@@ -576,6 +702,27 @@ const CommentNode = struct {
     _parent: ?*NodeInterface,
 
     node: NodeInterface,
+
+    pub fn init() CommentNode {
+        return .{ .node = NodeInterface{
+            .attributes = attributes,
+            .base_uri = base_uri,
+            .children = children,
+            .document_uri = document_uri,
+            .is_id = is_id,
+            .is_idrefs = is_idrefs,
+            .namespace_nodes = namespace_nodes,
+            .nilled = nilled,
+            .node_kind = node_kind,
+            .node_name = node_name,
+            .parent = parent,
+            .string_value = string_value,
+            .type_name = type_name,
+            .typed_value = typed_value,
+            .unparsed_entity_public_id = unparsed_entity_public_id,
+            .unparsed_entity_system_id = unparsed_entity_system_id,
+        } };
+    }
 
     fn attributes(self: *NodeInterface) []*AttributeNode {
         const _self: *CommentNode = @fieldParentPtr("node", self);
