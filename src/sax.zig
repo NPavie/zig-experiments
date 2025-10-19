@@ -1,6 +1,7 @@
 //! SAX parsing very basic implementation for XML 1.1
 
 const std = @import("std");
+const fs = std.fs;
 const unicode = std.unicode;
 const testing = std.testing;
 
@@ -261,7 +262,7 @@ const ENTITIES = std.StaticStringMap(u32).initComptime(.{
 });
 
 /// Zax options
-const ParserOptions = struct {
+pub const ParserOptions = struct {
     /// Strict mode : abort on invalid xml detection
     strict: ?bool = false,
     /// Preserve entities : do not decode entities in the text when raising text events
@@ -271,51 +272,51 @@ const ParserOptions = struct {
 };
 
 /// XML Namespace definition
-const Namespace = struct {
-    prefix: ?std.ArrayList(u8),
-    uri: ?std.ArrayList(u8),
+pub const Namespace = struct {
+    prefix: ?[]u8,
+    uri: ?[]u8,
 };
 
 /// XML Attribute : prefix:name="?value"
-const Attribute = struct {
+pub const Attribute = struct {
     namespace: ?*Namespace,
-    name: std.ArrayList(u8),
-    value: std.ArrayList(u8),
+    name: []u8,
+    value: []u8,
 };
 
 /// XML Tag
-const TagBase = struct {
+pub const TagBase = struct {
     namespace: ?*Namespace,
-    name: std.ArrayList(u8),
+    name: []u8,
 };
-const OpeningTag = struct {
+pub const OpeningTag = struct {
     base: TagBase,
     selfClosing: ?bool,
     attributes: ?std.ArrayList(Attribute),
 };
-const ClosingTag = TagBase;
+pub const ClosingTag = TagBase;
 
 /// XML Processing Instruction
 /// Note that the prolog is considered a special PI
-const ProcessingInstruction = struct {
-    target: std.ArrayList(u8),
-    content: std.ArrayList(u8),
+pub const ProcessingInstruction = struct {
+    target: []u8,
+    content: []u8,
 };
 
 /// Doctype declaration of an XML document
-const Doctype = struct {
+pub const Doctype = struct {
     /// Root element name
-    root: std.ArrayList(u8),
+    root: []u8,
     /// Public identifier for public typed DTD (undefined on SYSTEM declaration)
-    publicId: ?std.ArrayList(u8),
+    publicId: ?[]u8,
     /// System identifier (URI or path the dtd file)
-    systemId: ?std.ArrayList(u8),
+    systemId: ?[]u8,
     /// Possible subset of dtd declaration available in doctype
-    subset: ?std.ArrayList(u8),
+    subset: ?[]u8,
 };
 
 /// Slice position within the buffer
-const BufferSlice = struct {
+pub const BufferSlice = struct {
     start: usize,
     end: usize,
 };
@@ -427,44 +428,44 @@ const SelectionRange = struct {
 };
 
 /// Structure to hold event handlers pointers for the tokenizer
-const EventsHandler = struct {
+pub const EventsHandler = struct {
     // Start the parser
-    OnDocumentStart: ?*fn () void = undefined,
-    OnDocumentEnd: ?*fn () void = undefined,
+    OnDocumentStart: ?*const fn () void = undefined,
+    OnDocumentEnd: ?*const fn () void = undefined,
     // Handle the opening of a named tag
-    OnOpeningTagStart: ?*fn (name: []const u21, prefixEnd: usize) void = undefined,
+    OnOpeningTagStart: ?*const fn (name: []const u21, prefixEnd: usize) void = undefined,
     // Handle attribute name
-    OnAttributeName: ?*fn (name: []const u21, prefixEnd: usize) void = undefined,
+    OnAttributeName: ?*const fn (name: []const u21, prefixEnd: usize) void = undefined,
     // Handle attribute value
-    OnAttributeValueStart: ?*fn (delimiter: u21) void = undefined,
-    OnAttributeValueContent: ?*fn (content: []const u21) void = undefined,
-    OnAttributeValueEnd: ?*fn () void = undefined,
+    OnAttributeValueStart: ?*const fn (delimiter: u21) void = undefined,
+    OnAttributeValueContent: ?*const fn (content: []const u21) void = undefined,
+    OnAttributeValueEnd: ?*const fn () void = undefined,
     // Handle the closing of a named tag (including if it is selfclosing)
-    OnOpeningTagEnd: ?*fn (selfclosing: bool) void = undefined,
+    OnOpeningTagEnd: ?*const fn (selfclosing: bool) void = undefined,
     // Handle the closing of a named tag
-    OnClosingTag: ?*fn (name: []const u21, prefixEnd: u32) void = undefined,
+    OnClosingTag: ?*const fn (name: []const u21, prefixEnd: u32) void = undefined,
     // Handle doctype main part
-    OnDoctype: ?*fn (doctype: *Doctype) void = undefined,
+    OnDoctype: ?*const fn (doctype: *Doctype) void = undefined,
     // Handle doctype subset
-    OnDoctypeSubsetStart: ?*fn () void = undefined,
-    OnDoctypeSubsetContent: ?*fn (content: []const u21) void = undefined,
-    OnDoctypeSubsetEnd: ?*fn () void = undefined,
+    OnDoctypeSubsetStart: ?*const fn () void = undefined,
+    OnDoctypeSubsetContent: ?*const fn (content: []const u21) void = undefined,
+    OnDoctypeSubsetEnd: ?*const fn () void = undefined,
     // Handle comment
-    OnCommentStart: ?*fn () void = undefined,
-    OnCommentContent: ?*fn (content: []const u21) void = undefined,
-    OnCommentEnd: ?*fn () void = undefined,
+    OnCommentStart: ?*const fn () void = undefined,
+    OnCommentContent: ?*const fn (content: []const u21) void = undefined,
+    OnCommentEnd: ?*const fn () void = undefined,
     // Handle cdata
-    OnCDATAStart: ?*fn () void = undefined,
-    OnCDATAContent: ?*fn (content: []const u21) void = undefined,
-    OnCDATAEnd: ?*fn () void = undefined,
+    OnCDATAStart: ?*const fn () void = undefined,
+    OnCDATAContent: ?*const fn (content: []const u21) void = undefined,
+    OnCDATAEnd: ?*const fn () void = undefined,
     // Handle processing instructions
-    OnProcessingInstruction: ?*fn (pi: *ProcessingInstruction) void = undefined,
-    OnProcessingInstructionStart: ?*fn () void = undefined,
-    OnProcessingInstructionContent: ?*fn () void = undefined,
-    OnProcessingInstructionEnd: ?*fn () void = undefined,
+    OnProcessingInstruction: ?*const fn (pi: *ProcessingInstruction) void = undefined,
+    OnProcessingInstructionStart: ?*const fn () void = undefined,
+    OnProcessingInstructionContent: ?*const fn () void = undefined,
+    OnProcessingInstructionEnd: ?*const fn () void = undefined,
     // Handle text nodes
-    OnText: ?*fn (text: []const u21) void = undefined,
-    OnXMLErrors: ?*fn (xmlError: XMLTokenizerError, message: []const u21) void = undefined,
+    OnText: ?*const fn (text: []const u21) void = undefined,
+    OnXMLErrors: ?*const fn (xmlError: XMLTokenizerError, message: []const u21) void = undefined,
 };
 
 fn utf8Size(char: u8) u8 {
@@ -490,123 +491,137 @@ fn isUtf8Part(char: u8) bool {
 /// buffer_size : number of characters utf8 to bufferize
 ///
 /// events : event handlers for the parser
-pub fn ZaxTokenizer(buffer_size: comptime_int, events: EventsHandler, options: ParserOptions) type {
-    return struct {
-        const Self = @This();
-        // Empty event handlers with no event handlers
-        events: EventsHandler = events,
-        options: ParserOptions = options,
-        charBuffer: [4]u8 = [_]u8{ 0, 0, 0, 0 },
-        charBufferLen: u8 = 0,
-        parsedChar: u21 = 0,
-        parserBuffer: [buffer_size]u21 = [_]u21{0} ** buffer_size,
-        parserBufferLen: usize = 0,
-        entityBuffer: [10]u21 = [_]u21{0} ** 10, // entity has max 10 characters
-        entityBufferLen: usize = 0,
-        /// previous status of the parser to recover from errors
-        previousStatus: TokenizerStatus = TokenizerStatus.text,
-        /// currente status of the parser
-        status: TokenizerStatus = TokenizerStatus.text,
-        /// Parsing xml text
-        pub fn parse(self: Self, xmlBytes: []u8) !void {
-            for (xmlBytes, 0..) |char, index| {
-                _ = index;
-                if (self.options.rawstring) {
-                    self.charToParse = char;
-                    self.charIsComplete = true;
-                } else if (self.charToParse == 0) {
-                    self.charToParse = char;
-                    self.remainingCharCode = unicode.utf8ByteSequenceLength(char) - 1;
-                    if (self.remainingCharCode == -1) {
-                        //raise an utf8 decoding error event
-                        if (self.events.OnXMLErrors) |onXMLErrors| {
-                            onXMLErrors(&self.state, "Invalid UTF8 character");
-                        }
-                        self.options.rawstring = true;
-                        //fallback to raw ascii parsing or replace the char by U+FFFD
-                        //remaining = 0
-                        self.remainingCharCode = 0;
-                        self.charToParse = 0xFFFD;
-                    }
-                } else {
-                    if (isUtf8Part(char)) {
-                        self.charToParse = (self.charToParse << 8) | char;
-                        self.remainingCharCode -= 1;
-                    } else {
-                        //raise an utf8 decoding error event
-                        if (self.events.OnXMLErrors) |onXMLErrors| {
-                            onXMLErrors(&self.state, "Invalid UTF8 character");
-                        }
-                        self.options.rawstring = true;
-                        //fallback to raw ascii parsing or replace the char by U+FFFD
-                        //remaining = 0
-                        self.remainingCharCode = 0;
-                        self.charToParse = 0xFFFD;
-                    }
-                }
-                if (self.remainingCharCode == 0) {
-                    self.charToParse = try unicode.utf8Decode(self.charToParseBuffer[0..self.charToParseBufferLen]);
+pub const ZaxParser = struct {
+    const buffer_size = 64 * 4096;
+    // Empty event handlers with no event handlers
+    events: EventsHandler,
+    options: ParserOptions,
+    parsedChar: u21 = 0,
+    remainingCharCode: i8 = 0,
+    parserBuffer: [buffer_size]u21 = [_]u21{0} ** buffer_size,
+    parserBufferLen: usize = 0,
+    entityBuffer: [10]u21 = [_]u21{0} ** 10, // entity has max 10 characters
+    entityBufferLen: usize = 0,
+    /// previous status of the parser to recover from errors
+    previousStatus: TokenizerStatus = TokenizerStatus.text,
+    /// currente status of the parser
+    status: TokenizerStatus = TokenizerStatus.text,
 
-                    self.charToParse = 0;
-                }
-            }
-        }
+    pub fn init(events: EventsHandler, options: ParserOptions) ZaxParser {
+        return ZaxParser{
+            .events = events,
+            .options = options,
+        };
+    }
 
-        fn parseAsText(self: Self, char: u21) !void {
-            if (char == '&') {
-                self.entityBuffer[0] = char;
-                self.entityBufferLen = 1;
-                self.previousStatus = TokenizerStatus.text;
-                self.status = TokenizerStatus.entity;
-            } else if (char == '<') {
-                if (self.parsedBufferLen > 0 and self.events.OnText) |onText| {
-                    onText(self.parserBuffer[0..self.parsedBufferLen]);
+    /// Parsing xml text
+    pub fn parse(self: ZaxParser, xmlBytes: []const u8) !void {
+        for (xmlBytes) |char| {
+            if (self.options.rawstring.?) {
+                self.parsedChar = char;
+                self.remainingCharCode = 0;
+            } else if (self.charToParse == 0) {
+                self.parsedChar = char;
+                self.remainingCharCode = unicode.utf8ByteSequenceLength(char) - 1;
+                if (self.remainingCharCode == -1) {
+                    //raise an utf8 decoding error event
+                    if (self.events.OnXMLErrors) |onXMLErrors| {
+                        onXMLErrors(&self.state, "Invalid UTF8 character");
+                    }
+                    self.options.rawstring = true;
+                    //fallback to raw ascii parsing or replace the char by U+FFFD
+                    self.remainingCharCode = 0;
+                    self.charToParse = 0xFFFD;
                 }
-                self.parserBuffer[0] = char;
-                self.parserBufferLen = 1;
-                self.previousStatus = TokenizerStatus.text;
-                self.status = TokenizerStatus.tag;
             } else {
-                if (self.parserBufferLen == buffer_size) {
-                    if (self.events.OnText) |onText| {
-                        onText(self.parserBuffer[0..self.parsedBufferLen]);
+                if (isUtf8Part(char)) {
+                    self.charToParse = (self.charToParse << 8) | char;
+                    self.remainingCharCode -= 1;
+                } else {
+                    //raise an utf8 decoding error event
+                    if (self.events.OnXMLErrors) |onXMLErrors| {
+                        onXMLErrors(&self.state, "Invalid UTF8 character");
                     }
-                    self.parserBufferLen = 0;
+                    self.options.rawstring = true;
+                    self.remainingCharCode = 0;
+                    self.charToParse = 0xFFFD;
                 }
-                self.parserBuffer[self.parserBufferLen] = char;
-                self.parserBufferLen += 1;
+            }
+            if (self.remainingCharCode == 0) {
+                self.charToParse = try unicode.utf8Decode(self.charToParseBuffer[0..self.charToParseBufferLen]);
+                switch (self.status) {
+                    .text => try self.parseAsText(self.charToParse),
+                    .entity => try self.parseAsEntity(self.charToParse),
+                    .tag => {},
+                    .startTag => {},
+                    .endTag => {},
+                    .attribute => {},
+                    .attributeValue => {},
+                    .doctype => {},
+                    .doctypeSubset => {},
+                    .comment => {},
+                    .processingInstruction => {},
+                    .cdata => {},
+                }
+                self.charToParse = 0;
             }
         }
-        fn parseAsEntity(self: Self, char: u21) !void {
-            if (char == ';') {
-                if (options.preserve_entities) {}
-                self.parserBuffer[self.parserBufferLen] = char;
-                self.parserBufferLen += 1;
+    }
+
+    fn parseAsText(self: ZaxParser, char: u21) !void {
+        if (char == '&') {
+            self.entityBuffer[0] = char;
+            self.entityBufferLen = 1;
+            self.previousStatus = TokenizerStatus.text;
+            self.status = TokenizerStatus.entity;
+        } else if (char == '<') {
+            if (self.parsedBufferLen > 0 and self.events.OnText) |onText| {
+                onText(self.parserBuffer[0..self.parsedBufferLen]);
+            }
+            self.parserBuffer[0] = char;
+            self.parserBufferLen = 1;
+            self.previousStatus = TokenizerStatus.text;
+            self.status = TokenizerStatus.tag;
+        } else {
+            if (self.parserBufferLen == buffer_size) {
                 if (self.events.OnText) |onText| {
                     onText(self.parserBuffer[0..self.parsedBufferLen]);
                 }
                 self.parserBufferLen = 0;
-                self.previousStatus = TokenizerStatus.entity;
-                self.status = TokenizerStatus.text;
-            } else {
-                if (self.parserBufferLen == buffer_size) {
-                    if (self.events.OnText) |onText| {
-                        onText(self.parserBuffer[0..self.parsedBufferLen]);
-                    }
-                    self.parserBufferLen = 0;
-                }
-                self.parserBuffer[self.parserBufferLen] = char;
-                self.parserBufferLen += 1;
             }
+            self.parserBuffer[self.parserBufferLen] = char;
+            self.parserBufferLen += 1;
         }
-        //fn parseAsOpeningTag(self: Self, char: u21) !void {}
-        //fn parseAsAttributeName(self: Self, char: u21) !void {}
-        //fn parseAsAttributeValue(self: Self, char: u21) !void {}
-        //fn parseAsComment(self: Self, char: u21) !void {}
-        //fn parseAsPI(self: Self, char: u21) !void {}
-        //fn parseAsCDATA(self: Self, char: u21) !void {}
-    };
-}
+    }
+    fn parseAsEntity(self: ZaxParser, char: u21) !void {
+        if (char == ';') {
+            if (self.options.preserve_entities) {}
+            self.parserBuffer[self.parserBufferLen] = char;
+            self.parserBufferLen += 1;
+            if (self.events.OnText) |onText| {
+                onText(self.parserBuffer[0..self.parsedBufferLen]);
+            }
+            self.parserBufferLen = 0;
+            self.previousStatus = TokenizerStatus.entity;
+            self.status = TokenizerStatus.text;
+        } else {
+            if (self.parserBufferLen == buffer_size) {
+                if (self.events.OnText) |onText| {
+                    onText(self.parserBuffer[0..self.parsedBufferLen]);
+                }
+                self.parserBufferLen = 0;
+            }
+            self.parserBuffer[self.parserBufferLen] = char;
+            self.parserBufferLen += 1;
+        }
+    }
+    //fn parseAsOpeningTag(self: Self, char: u21) !void {}
+    //fn parseAsAttributeName(self: Self, char: u21) !void {}
+    //fn parseAsAttributeValue(self: Self, char: u21) !void {}
+    //fn parseAsComment(self: Self, char: u21) !void {}
+    //fn parseAsPI(self: Self, char: u21) !void {}
+    //fn parseAsCDATA(self: Self, char: u21) !void {}
+};
 
 test "parser initialization" {}
 
