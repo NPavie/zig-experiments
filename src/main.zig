@@ -12,9 +12,10 @@ pub fn main() !void {
     std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
 
     const textString = "Hello, Zig SAX Parser!";
+
     const handler: sax.EventsHandler = .{
         .OnText = onText,
     };
     var tokenizer = sax.ZaxParser.init(handler, .{});
-    try tokenizer.parse(textString);
+    try tokenizer.parse(textString[0..]);
 }

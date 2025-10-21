@@ -465,7 +465,7 @@ pub const EventsHandler = struct {
     OnProcessingInstructionEnd: ?*const fn () void = undefined,
     // Handle text nodes
     OnText: ?*const fn (text: []const u21) void = undefined,
-    OnXMLErrors: ?*const fn (xmlError: XMLTokenizerError, message: []const u21) void = undefined,
+    OnXMLErrors: ?*const fn (xmlError: XMLTokenizerError, message: []const u8) void = undefined,
 };
 
 fn utf8Size(char: u8) u8 {
@@ -506,52 +506,70 @@ pub const ZaxParser = struct {
     previousStatus: TokenizerStatus = TokenizerStatus.text,
     /// currente status of the parser
     status: TokenizerStatus = TokenizerStatus.text,
+    currentLine: usize = 0,
+    currentColumn: usize = 0,
 
     pub fn init(events: EventsHandler, options: ParserOptions) ZaxParser {
         return ZaxParser{
             .events = events,
             .options = options,
+            .parsedChar = 0,
+            .remainingCharCode = 0,
+            .parserBuffer = [_]u21{0} ** buffer_size,
+            .parserBufferLen = 0,
+            .entityBuffer = [_]u21{0} ** 10,
+            .entityBufferLen = 0,
+            .previousStatus = TokenizerStatus.text,
+            .status = TokenizerStatus.text,
+            .currentLine = 0,
+            .currentColumn = 0,
         };
     }
 
     /// Parsing xml text
-    pub fn parse(self: ZaxParser, xmlBytes: []const u8) !void {
+    pub fn parse(self: *ZaxParser, xmlBytes: []const u8) !void {
         for (xmlBytes) |char| {
             if (self.options.rawstring.?) {
                 self.parsedChar = char;
                 self.remainingCharCode = 0;
-            } else if (self.charToParse == 0) {
+            } else if (self.parsedChar == 0) {
                 self.parsedChar = char;
-                self.remainingCharCode = unicode.utf8ByteSequenceLength(char) - 1;
+                self.remainingCharCode = (unicode.utf8ByteSequenceLength(char) catch 0) - 1;
                 if (self.remainingCharCode == -1) {
                     //raise an utf8 decoding error event
                     if (self.events.OnXMLErrors) |onXMLErrors| {
-                        onXMLErrors(&self.state, "Invalid UTF8 character");
+                        onXMLErrors(XMLTokenizerError.XMLInvalidCharacterInTag, "Invalid UTF8 character");
                     }
                     self.options.rawstring = true;
                     //fallback to raw ascii parsing or replace the char by U+FFFD
                     self.remainingCharCode = 0;
-                    self.charToParse = 0xFFFD;
+                    self.parsedChar = 0xFFFD;
                 }
             } else {
                 if (isUtf8Part(char)) {
-                    self.charToParse = (self.charToParse << 8) | char;
+                    self.parsedChar = (self.parsedChar << 8) | char;
                     self.remainingCharCode -= 1;
                 } else {
                     //raise an utf8 decoding error event
                     if (self.events.OnXMLErrors) |onXMLErrors| {
-                        onXMLErrors(&self.state, "Invalid UTF8 character");
+                        onXMLErrors(XMLTokenizerError.XMLInvalidCharacterInTag, "Invalid UTF8 character");
                     }
                     self.options.rawstring = true;
                     self.remainingCharCode = 0;
-                    self.charToParse = 0xFFFD;
+                    self.parsedChar = 0xFFFD;
                 }
             }
             if (self.remainingCharCode == 0) {
-                self.charToParse = try unicode.utf8Decode(self.charToParseBuffer[0..self.charToParseBufferLen]);
+                //self.parsedChar = try unicode.utf8Decode(self.parsedCharBuffer[0..self.parsedCharBufferLen]);
+                if (self.parsedChar == '\n') {
+                    self.currentLine += 1;
+                    self.currentColumn = 0;
+                } else {
+                    self.currentColumn += 1;
+                }
                 switch (self.status) {
-                    .text => try self.parseAsText(self.charToParse),
-                    .entity => try self.parseAsEntity(self.charToParse),
+                    .text => try self.parseAsText(self.parsedChar),
+                    .entity => try self.parseAsEntity(self.parsedChar),
                     .tag => {},
                     .startTag => {},
                     .endTag => {},
@@ -563,12 +581,12 @@ pub const ZaxParser = struct {
                     .processingInstruction => {},
                     .cdata => {},
                 }
-                self.charToParse = 0;
+                self.parsedChar = 0;
             }
         }
     }
 
-    fn parseAsText(self: ZaxParser, char: u21) !void {
+    fn parseAsText(self: *ZaxParser, char: u21) !void {
         if (char == '&') {
             self.entityBuffer[0] = char;
             self.entityBufferLen = 1;
