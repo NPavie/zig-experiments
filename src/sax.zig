@@ -321,114 +321,31 @@ pub const BufferSlice = struct {
     end: usize,
 };
 
-// Parsing xml
-// FOr each char in the content
-// text
-// If text and < we start a tag
-// if tag and > we end a tag
-//
-
-// Ideas
-// For the status evaluation,
-// consider buffering until some separator is found (any space or < or > or & or ; ir " or ')
-// (opening and closing tag state, opening and closing entity state and spaces for element separations within tag)
-
-const TokenizerData = union(enum) {
-    text: std.ArrayList(u8), // default state
-    entity: std.ArrayList(u8), // & -> // end =  EntityStarted + ; => go up the state tree
-    tag: std.ArrayList(u8), // Text + < // tag analysis buffer
-    startTag: OpeningTag, // Tag + (namespace+":")? + name + (S + Attribute)* + >
-    attribute: std.ArrayList(u8), // OpeningTag + S + (namespace+":")? + name + "="" + AttributeValue + """
-    attributeValue: std.ArrayList(u8), // Attribute + =("|')' + content + ("|')
-    doctype: Doctype, // DataTagStarted + "DOCTYPE" + S + RootName + S + ((SYSTEM) | (PUBLIC + S + PublicID)) + S + SystemId + (DoctypeSubset)? + S* + >
-    doctypeSubset: std.ArrayList(u8), // (DoctypeStarted | DoctypeSubset) + [ + (DoctypeSubset | content) + ]
-    closingTag: ClosingTag, // TagStarted + / + (namespace + ":")? + name + >
-    comment: std.ArrayList(u8), // DataTagStarted + '--' + content + -- + >
-    processingInstruction: ProcessingInstruction, // TagStarted + ? + target + S + content + ?>
-    cdata: std.ArrayList(u8), // <![CDATA[ + content + ]]>
-};
-
 const TokenizerStatus = enum {
+    start,
     text, // parser is handling text data
     entity, // Parser is currently handling entity, should start when & is found and end when ; is found
     tag, // Parser is handling any type of tag and continue until a delimiter is found
-    startTag, // Parser was in tag state and found
-    endTag,
+    doctype, // tag state + "!DOCTYPE" found in parsed buffer
+    cdata, // tag state + "![CDATA[" found in parsed buffer, back to text when ends with "]]>"
+    comment, // tag state + "!--" found in parsed buffer, ended by "-->"
+    processingInstruction, // tag state + '?' found in parsed buffer
+    endTag, // tag state + / found in parsed buffer
+    startTag, // tag state + valid (prefix:)?name found in parsed buffer
     attribute,
     attributeValue,
-    doctype,
     doctypeSubset,
-    comment,
-    processingInstruction,
-    cdata,
+    end,
 };
 
 const XMLTokenizerError = error{
     XMLInvalidCharacterInTag,
     XMLInvalidCharacterInDoctype,
-    MLInvalidDoctypeType,
-};
-
-const State = struct {
-    content: TokenizerStatus = TokenizerStatus.text,
-    line: usize = 0,
-    column: usize = 0,
-    previous: ?*State = null, // for linked list to previous state
-};
-
-fn newState(previous: *State, content: TokenizerData, alloc: std.mem.Allocator) *State {
-    return alloc.create(State){
-        .previous = previous,
-        .content = content,
-        .line = previous.line,
-        .column = previous.column,
-    };
-}
-
-fn popState(state: *State, alloc: std.mem.Allocator) *State {
-    // retrieve previous state
-    const previous = state.previous;
-    // clean current state
-    switch (state.content) {
-        .text => state.content.text.deinit(),
-        .entity => state.content.entity.deinit(),
-        .tag => state.content.tag.deinit(),
-        .startTag => |s| {
-            s.base.name.deinit();
-            s.attributes.?.deinit();
-        },
-        .attribute => state.content.attribute.deinit(),
-        .attributeValue => state.content.attributeValue.deinit(),
-        .doctype => |d| {
-            d.publicId.?.deinit();
-            d.systemId.?.deinit();
-            d.subset.?.deinit();
-            d.root.deinit();
-        },
-        .doctypeSubset => state.content.doctypeSubset.deinit(),
-        .closingTag => {},
-        .comment => state.content.comment.deinit(),
-        .processingInstruction => {},
-        .cdata => state.content.cdata.deinit(),
-        else => {},
-    }
-    alloc.destroy(state);
-    // return pointer to previous state
-    return previous;
-}
-
-const Cursor = struct {
-    line: usize,
-    column: usize,
-};
-
-const SelectionRange = struct {
-    start: Cursor,
-    end: Cursor,
+    XMLInvalidDoctypeType,
 };
 
 /// Structure to hold event handlers pointers for the tokenizer
-pub const EventsHandler = struct {
+pub const TokenizerEventsHandler = struct {
     // Start the parser
     OnDocumentStart: ?*const fn () void = undefined,
     OnDocumentEnd: ?*const fn () void = undefined,
@@ -459,7 +376,6 @@ pub const EventsHandler = struct {
     OnCDATAContent: ?*const fn (content: []const u21) void = undefined,
     OnCDATAEnd: ?*const fn () void = undefined,
     // Handle processing instructions
-    OnProcessingInstruction: ?*const fn (pi: *ProcessingInstruction) void = undefined,
     OnProcessingInstructionStart: ?*const fn () void = undefined,
     OnProcessingInstructionContent: ?*const fn () void = undefined,
     OnProcessingInstructionEnd: ?*const fn () void = undefined,
@@ -491,12 +407,13 @@ fn isUtf8Part(char: u8) bool {
 /// buffer_size : number of characters utf8 to bufferize
 ///
 /// events : event handlers for the parser
-pub const ZaxParser = struct {
+pub const ZaxTokenizer = struct {
     const buffer_size = 64 * 4096;
     // Empty event handlers with no event handlers
-    events: EventsHandler,
+    events: TokenizerEventsHandler,
     options: ParserOptions,
-    parsedChar: u21 = 0,
+    parsedChar: [4]u8 = [_]u8{0} ** 4,
+    parsedCharLen: usize = 0,
     remainingCharCode: i8 = 0,
     parserBuffer: [buffer_size]u21 = [_]u21{0} ** buffer_size,
     parserBufferLen: usize = 0,
@@ -509,11 +426,12 @@ pub const ZaxParser = struct {
     currentLine: usize = 0,
     currentColumn: usize = 0,
 
-    pub fn init(events: EventsHandler, options: ParserOptions) ZaxParser {
-        return ZaxParser{
+    pub fn init(events: TokenizerEventsHandler, options: ParserOptions) ZaxTokenizer {
+        return ZaxTokenizer{
             .events = events,
             .options = options,
-            .parsedChar = 0,
+            .parsedChar = [_]u8{0} ** 4,
+            .parsedCharLen = 0,
             .remainingCharCode = 0,
             .parserBuffer = [_]u21{0} ** buffer_size,
             .parserBufferLen = 0,
@@ -523,17 +441,25 @@ pub const ZaxParser = struct {
             .status = TokenizerStatus.text,
             .currentLine = 0,
             .currentColumn = 0,
+            //.allocator = allocator,
         };
     }
 
     /// Parsing xml text
-    pub fn parse(self: *ZaxParser, xmlBytes: []const u8) !void {
+    pub fn parse(self: *ZaxTokenizer, xmlBytes: []const u8) !void {
         for (xmlBytes) |char| {
+            if (self.status == TokenizerStatus.start) {
+                if (self.events.OnDocumentStart) |onDocumentStart| {
+                    onDocumentStart();
+                }
+                self.status = TokenizerStatus.text;
+                self.parserBufferLen = 0;
+            }
             if (self.options.rawstring.?) {
                 self.parsedChar = char;
                 self.remainingCharCode = 0;
-            } else if (self.parsedChar == 0) {
-                self.parsedChar = char;
+            } else if (self.parsedCharLen == 0) {
+                self.parsedChar[self.parsedCharLen] = char;
                 self.remainingCharCode = (unicode.utf8ByteSequenceLength(char) catch 0) - 1;
                 if (self.remainingCharCode == -1) {
                     //raise an utf8 decoding error event
@@ -547,7 +473,8 @@ pub const ZaxParser = struct {
                 }
             } else {
                 if (isUtf8Part(char)) {
-                    self.parsedChar = (self.parsedChar << 8) | char;
+                    self.parsedChar[self.parsedCharLen] = char;
+                    self.parsedCharLen += 1;
                     self.remainingCharCode -= 1;
                 } else {
                     //raise an utf8 decoding error event
@@ -556,10 +483,12 @@ pub const ZaxParser = struct {
                     }
                     self.options.rawstring = true;
                     self.remainingCharCode = 0;
-                    self.parsedChar = 0xFFFD;
+                    self.parsedChar[0] = 0xFFFD;
+                    self.parsedCharLen = 1;
                 }
             }
             if (self.remainingCharCode == 0) {
+                const unicodeChar = try unicode.utf8Decode(self.parsedChar[0..self.parsedCharLen]);
                 //self.parsedChar = try unicode.utf8Decode(self.parsedCharBuffer[0..self.parsedCharBufferLen]);
                 if (self.parsedChar == '\n') {
                     self.currentLine += 1;
@@ -568,8 +497,8 @@ pub const ZaxParser = struct {
                     self.currentColumn += 1;
                 }
                 switch (self.status) {
-                    .text => try self.parseAsText(self.parsedChar),
-                    .entity => try self.parseAsEntity(self.parsedChar),
+                    .text => try self.parseAsText(unicodeChar),
+                    .entity => try self.parseAsEntity(unicodeChar),
                     .tag => {},
                     .startTag => {},
                     .endTag => {},
@@ -581,16 +510,23 @@ pub const ZaxParser = struct {
                     .processingInstruction => {},
                     .cdata => {},
                 }
-                self.parsedChar = 0;
+                self.parsedChar = [_]u8{0} ** 4;
+                self.parsedCharLen = 0;
             }
         }
     }
+    pub fn end(self: *ZaxTokenizer) void {
+        // Todo : flush rest of buffers to finalise treatment
+        if (self.events.OnDocumentEnd) |onDocumentEnd| {
+            onDocumentEnd();
+        }
+    }
 
-    fn parseAsText(self: *ZaxParser, char: u21) !void {
+    fn parseAsText(self: *ZaxTokenizer, char: u21) !void {
         if (char == '&') {
             self.entityBuffer[0] = char;
             self.entityBufferLen = 1;
-            self.previousStatus = TokenizerStatus.text;
+            self.previousStatus = self.status;
             self.status = TokenizerStatus.entity;
         } else if (char == '<') {
             if (self.parsedBufferLen > 0 and self.events.OnText) |onText| {
@@ -598,7 +534,7 @@ pub const ZaxParser = struct {
             }
             self.parserBuffer[0] = char;
             self.parserBufferLen = 1;
-            self.previousStatus = TokenizerStatus.text;
+            self.previousStatus = self.status;
             self.status = TokenizerStatus.tag;
         } else {
             if (self.parserBufferLen == buffer_size) {
@@ -611,7 +547,7 @@ pub const ZaxParser = struct {
             self.parserBufferLen += 1;
         }
     }
-    fn parseAsEntity(self: ZaxParser, char: u21) !void {
+    fn parseAsEntity(self: ZaxTokenizer, char: u21) !void {
         if (char == ';') {
             if (self.options.preserve_entities) {}
             self.parserBuffer[self.parserBufferLen] = char;
@@ -620,8 +556,8 @@ pub const ZaxParser = struct {
                 onText(self.parserBuffer[0..self.parsedBufferLen]);
             }
             self.parserBufferLen = 0;
+            self.status = self.previousStatus;
             self.previousStatus = TokenizerStatus.entity;
-            self.status = TokenizerStatus.text;
         } else {
             if (self.parserBufferLen == buffer_size) {
                 if (self.events.OnText) |onText| {

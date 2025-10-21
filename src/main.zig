@@ -13,9 +13,9 @@ pub fn main() !void {
 
     const textString = "Hello, Zig SAX Parser!";
 
-    const handler: sax.EventsHandler = .{
+    const handler: sax.TokenizerEventsHandler = .{
         .OnText = onText,
     };
-    var tokenizer = sax.ZaxParser.init(handler, .{});
+    var tokenizer = sax.ZaxTokenizer.init(handler, .{});
     try tokenizer.parse(textString[0..]);
 }
