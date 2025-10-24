@@ -3,7 +3,7 @@
 const std = @import("std");
 const fs = std.fs;
 const unicode = std.unicode;
-const testing = std.testing;
+//const testing = std.testing;
 
 const ENTITIES = std.StaticStringMap(u32).initComptime(.{
     .{ "amp", '&' },
@@ -342,6 +342,7 @@ const XMLTokenizerError = error{
     XMLInvalidCharacterInTag,
     XMLInvalidCharacterInDoctype,
     XMLInvalidDoctypeType,
+    XMLInvalidEntityStart,
 };
 
 /// Structure to hold event handlers pointers for the tokenizer
@@ -456,20 +457,18 @@ pub const ZaxTokenizer = struct {
                 self.parserBufferLen = 0;
             }
             if (self.options.rawstring.?) {
-                self.parsedChar = char;
+                self.parsedChar[0] = char;
                 self.remainingCharCode = 0;
+                self.parserBufferLen = 1;
             } else if (self.parsedCharLen == 0) {
                 self.parsedChar[self.parsedCharLen] = char;
+                self.parsedCharLen += 1;
                 self.remainingCharCode = (unicode.utf8ByteSequenceLength(char) catch 0) - 1;
                 if (self.remainingCharCode == -1) {
                     //raise an utf8 decoding error event
                     if (self.events.OnXMLErrors) |onXMLErrors| {
                         onXMLErrors(XMLTokenizerError.XMLInvalidCharacterInTag, "Invalid UTF8 character");
                     }
-                    self.options.rawstring = true;
-                    //fallback to raw ascii parsing or replace the char by U+FFFD
-                    self.remainingCharCode = 0;
-                    self.parsedChar = 0xFFFD;
                 }
             } else {
                 if (isUtf8Part(char)) {
@@ -481,56 +480,78 @@ pub const ZaxTokenizer = struct {
                     if (self.events.OnXMLErrors) |onXMLErrors| {
                         onXMLErrors(XMLTokenizerError.XMLInvalidCharacterInTag, "Invalid UTF8 character");
                     }
-                    self.options.rawstring = true;
-                    self.remainingCharCode = 0;
-                    self.parsedChar[0] = 0xFFFD;
-                    self.parsedCharLen = 1;
                 }
             }
-            if (self.remainingCharCode == 0) {
-                const unicodeChar = try unicode.utf8Decode(self.parsedChar[0..self.parsedCharLen]);
-                //self.parsedChar = try unicode.utf8Decode(self.parsedCharBuffer[0..self.parsedCharBufferLen]);
-                if (self.parsedChar == '\n') {
+            if (self.remainingCharCode <= 0) {
+                //std.debug.print("fin de parsing de caractère {}\n", .{});
+                const unicodeChar = if (self.remainingCharCode < 0) 0xFFFD else try unicode.utf8Decode(self.parsedChar[0..self.parsedCharLen]);
+                if (self.parsedCharLen == 1 and self.parsedChar[0] == '\n') {
                     self.currentLine += 1;
                     self.currentColumn = 0;
                 } else {
                     self.currentColumn += 1;
                 }
+                //std.debug.print("l{d} c{d}\n", .{ self.currentLine, self.currentColumn });
                 switch (self.status) {
-                    .text => try self.parseAsText(unicodeChar),
-                    .entity => try self.parseAsEntity(unicodeChar),
-                    .tag => {},
-                    .startTag => {},
-                    .endTag => {},
-                    .attribute => {},
-                    .attributeValue => {},
+                    .start => {},
+                    .text => {
+                        std.debug.print("char {c}\n", .{char});
+                        //std.debug.print("fin de parsing de texte", .{});
+                        try self.parseAsText(unicodeChar);
+                    },
+                    .entity => {
+                        //std.debug.print("fin de parsing de texte", .{});
+                        try self.parseAsEntity(unicodeChar);
+                    },
+                    .tag => {
+                        try self.parseAsOpeningTag(unicodeChar);
+                    },
                     .doctype => {},
-                    .doctypeSubset => {},
+                    .cdata => {},
                     .comment => {},
                     .processingInstruction => {},
-                    .cdata => {},
+                    .endTag => {},
+                    .startTag => {},
+                    .attribute => {},
+                    .attributeValue => {},
+                    .doctypeSubset => {},
+                    .end => {},
                 }
                 self.parsedChar = [_]u8{0} ** 4;
                 self.parsedCharLen = 0;
             }
         }
     }
-    pub fn end(self: *ZaxTokenizer) void {
+
+    pub fn deinit(self: *ZaxTokenizer) void {
         // Todo : flush rest of buffers to finalise treatment
         if (self.events.OnDocumentEnd) |onDocumentEnd| {
             onDocumentEnd();
+        }
+        // Buffer is not empty, flush as text
+        if (self.parserBufferLen > 0) {
+            if (self.events.OnText) |onText| {
+                onText(self.parserBuffer[0..self.parserBufferLen]);
+            }
         }
     }
 
     fn parseAsText(self: *ZaxTokenizer, char: u21) !void {
         if (char == '&') {
-            self.entityBuffer[0] = char;
-            self.entityBufferLen = 1;
+            if (self.parserBufferLen > 0) {
+                if (self.events.OnText) |onText| {
+                    onText(self.parserBuffer[0..self.parserBufferLen]);
+                }
+            }
+            self.parserBuffer[0] = char;
+            self.parserBufferLen = 1;
             self.previousStatus = self.status;
             self.status = TokenizerStatus.entity;
         } else if (char == '<') {
-            if (self.parsedBufferLen > 0 and self.events.OnText) |onText| {
-                onText(self.parserBuffer[0..self.parsedBufferLen]);
+            if (self.parserBufferLen > 0) {
+                if (self.events.OnText) |onText| {
+                    onText(self.parserBuffer[0..self.parserBufferLen]);
+                }
             }
             self.parserBuffer[0] = char;
             self.parserBufferLen = 1;
@@ -539,7 +560,7 @@ pub const ZaxTokenizer = struct {
         } else {
             if (self.parserBufferLen == buffer_size) {
                 if (self.events.OnText) |onText| {
-                    onText(self.parserBuffer[0..self.parsedBufferLen]);
+                    onText(self.parserBuffer[0..self.parserBufferLen]);
                 }
                 self.parserBufferLen = 0;
             }
@@ -547,42 +568,62 @@ pub const ZaxTokenizer = struct {
             self.parserBufferLen += 1;
         }
     }
-    fn parseAsEntity(self: ZaxTokenizer, char: u21) !void {
-        if (char == ';') {
-            if (self.options.preserve_entities) {}
+    fn parseAsEntity(self: *ZaxTokenizer, char: u21) !void {
+        if (char == ';' or self.parserBufferLen >= 10) {
+            // (sinon a la place de la taille, vérifier si un caractère non authorisé est rencontré)
+            //if (self.options.preserve_entities) {}
             self.parserBuffer[self.parserBufferLen] = char;
             self.parserBufferLen += 1;
-            if (self.events.OnText) |onText| {
-                onText(self.parserBuffer[0..self.parsedBufferLen]);
+            switch (self.previousStatus) {
+                .text => {
+                    if (self.events.OnText) |onText| {
+                        onText(self.parserBuffer[0..self.parserBufferLen]);
+                    }
+                    self.parserBufferLen = 0;
+                },
+                .attributeValue => {
+                    if (self.events.OnAttributeValueContent) |OnAttributeValueContent| {
+                        OnAttributeValueContent(self.parserBuffer[0..self.parserBufferLen]);
+                    }
+                    self.parserBufferLen = 0;
+                },
+                else => {
+                    if (self.events.OnXMLErrors) |onXMLErrors| {
+                        onXMLErrors(XMLTokenizerError.XMLInvalidEntityStart, "Entity found in invalid context");
+                    }
+                    self.status = TokenizerStatus.text;
+                    // TODO : raise malformed XML, unauthorized entity in current state
+                    if (self.options.strict.?) {
+                        return XMLTokenizerError.XMLInvalidEntityStart;
+                    }
+                },
             }
+            // TODO : raise malformed entity warning if entity is more than 10 chars
             self.parserBufferLen = 0;
             self.status = self.previousStatus;
             self.previousStatus = TokenizerStatus.entity;
         } else {
-            if (self.parserBufferLen == buffer_size) {
-                if (self.events.OnText) |onText| {
-                    onText(self.parserBuffer[0..self.parsedBufferLen]);
-                }
-                self.parserBufferLen = 0;
-            }
             self.parserBuffer[self.parserBufferLen] = char;
             self.parserBufferLen += 1;
         }
     }
-    //fn parseAsOpeningTag(self: Self, char: u21) !void {}
+    fn parseAsOpeningTag(self: *ZaxTokenizer, char: u21) !void {
+        self.parserBuffer[self.parserBufferLen] = char;
+        self.parserBufferLen += 1;
+        if (self.parserBufferLen == 2) {
+            if (self.parserBuffer[self.parserBufferLen - 1] == '/') {
+                self.status = TokenizerStatus.endTag;
+                return;
+            }
+            if (self.parserBuffer[self.parserBufferLen - 1] == '?') {
+                self.status = TokenizerStatus.processingInstruction;
+                return;
+            }
+        }
+    }
     //fn parseAsAttributeName(self: Self, char: u21) !void {}
     //fn parseAsAttributeValue(self: Self, char: u21) !void {}
     //fn parseAsComment(self: Self, char: u21) !void {}
     //fn parseAsPI(self: Self, char: u21) !void {}
     //fn parseAsCDATA(self: Self, char: u21) !void {}
 };
-
-test "parser initialization" {}
-
-test "parser pi analysis" {}
-
-test "parser tag analysis" {}
-
-test "parser simple document" {}
-
-test "parser doctype analysis" {}
