@@ -281,6 +281,7 @@ pub const Namespace = struct {
 pub const Attribute = struct {
     namespace: ?*Namespace,
     name: []u8,
+    delimiter: u8, // ' or "
     value: []u8,
 };
 
@@ -307,6 +308,7 @@ pub const ProcessingInstruction = struct {
 pub const Doctype = struct {
     /// Root element name
     root: []u8,
+    _type: ?[]u8, // SYSTEM or PUBLIC
     /// Public identifier for public typed DTD (undefined on SYSTEM declaration)
     publicId: ?[]u8,
     /// System identifier (URI or path the dtd file)
@@ -315,34 +317,53 @@ pub const Doctype = struct {
     subset: ?[]u8,
 };
 
-/// Slice position within the buffer
-pub const BufferSlice = struct {
-    start: usize,
-    end: usize,
-};
+
+
+
 
 const TokenizerStatus = enum {
+    /// Document starting
     start,
+    /// Parsing text
     text, // parser is handling text data
+    /// Parsing entity
     entity, // Parser is currently handling entity, should start when & is found and end when ; is found
+    /// Parsing tag (anything starting by '<' )
     tag, // Parser is handling any type of tag and continue until a delimiter is found
+    /// Parsing <!DOCTYPE element
     doctype, // tag state + "!DOCTYPE" found in parsed buffer
+    /// Parsing <![CDATA[ element
     cdata, // tag state + "![CDATA[" found in parsed buffer, back to text when ends with "]]>"
+    /// Parsing <!--
     comment, // tag state + "!--" found in parsed buffer, ended by "-->"
+    /// Parsing <? element
     processingInstruction, // tag state + '?' found in parsed buffer
+    /// Parsing </ element
     endTag, // tag state + / found in parsed buffer
-    startTag, // tag state + valid (prefix:)?name found in parsed buffer
+    /// Parsing <(prefix:)?name element
+    namedTag, // tag state + valid (prefix:)?name found in parsed buffer
+    /// after namedtag, parsing attribute=["']
     attribute,
+    /// After attribute, parsing text until delimiter
     attributeValue,
+    /// After
     doctypeSubset,
+    /// End of document
+    // 
     end,
 };
 
 const XMLTokenizerError = error{
-    XMLInvalidCharacterInTag,
-    XMLInvalidCharacterInDoctype,
-    XMLInvalidDoctypeType,
-    XMLInvalidEntityStart,
+    XMLInvalidXML,
+    Utf8InvalidStartByte,
+    Utf8DecodeError
+};
+
+
+pub const TokenizerState = struct {
+    status: TokenizerStatus = TokenizerStatus.start,
+    currentLine: usize = 0,
+    currentColumn: usize = 0,
 };
 
 /// Structure to hold event handlers pointers for the tokenizer
@@ -350,10 +371,10 @@ pub const TokenizerEventsHandler = struct {
     // Start the parser
     OnDocumentStart: ?*const fn () void = undefined,
     OnDocumentEnd: ?*const fn () void = undefined,
-    // Handle the opening of a named tag
-    OnOpeningTagStart: ?*const fn (name: []const u21, prefixEnd: usize) void = undefined,
+    // Handle the start of a named tag (return the prefix and name)
+    OnOpeningTagStart: ?*const fn (name: []const u21) void = undefined,
     // Handle attribute name
-    OnAttributeName: ?*const fn (name: []const u21, prefixEnd: usize) void = undefined,
+    OnAttributeName: ?*const fn (name: []const u21) void = undefined,
     // Handle attribute value
     OnAttributeValueStart: ?*const fn (delimiter: u21) void = undefined,
     OnAttributeValueContent: ?*const fn (content: []const u21) void = undefined,
@@ -363,11 +384,12 @@ pub const TokenizerEventsHandler = struct {
     // Handle the closing of a named tag
     OnClosingTag: ?*const fn (name: []const u21, prefixEnd: u32) void = undefined,
     // Handle doctype main part
-    OnDoctype: ?*const fn (doctype: *Doctype) void = undefined,
+    OnDoctypeStart: ?*const fn (doctype: Doctype) void = undefined,
     // Handle doctype subset
     OnDoctypeSubsetStart: ?*const fn () void = undefined,
     OnDoctypeSubsetContent: ?*const fn (content: []const u21) void = undefined,
     OnDoctypeSubsetEnd: ?*const fn () void = undefined,
+    OnDoctypeEnd: ?*const fn () void = undefined,
     // Handle comment
     OnCommentStart: ?*const fn () void = undefined,
     OnCommentContent: ?*const fn (content: []const u21) void = undefined,
@@ -382,7 +404,7 @@ pub const TokenizerEventsHandler = struct {
     OnProcessingInstructionEnd: ?*const fn () void = undefined,
     // Handle text nodes
     OnText: ?*const fn (text: []const u21) void = undefined,
-    OnXMLErrors: ?*const fn (xmlError: XMLTokenizerError, message: []const u8) void = undefined,
+    OnXMLErrors: ?*const fn (state: TokenizerState, xmlError: XMLTokenizerError, message: []const u8) void = undefined,
 };
 
 fn utf8Size(char: u8) u8 {
@@ -403,6 +425,7 @@ fn isUtf8Part(char: u8) bool {
     return (char & 0b1100_0000) == 0b1000_0000;
 }
 
+
 /// Zax tokenizer to parse xml content with a fixed size buffer
 ///
 /// buffer_size : number of characters utf8 to bufferize
@@ -421,9 +444,17 @@ pub const ZaxTokenizer = struct {
     entityBuffer: [10]u21 = [_]u21{0} ** 10, // entity has max 10 characters
     entityBufferLen: usize = 0,
     /// previous status of the parser to recover from errors
-    previousStatus: TokenizerStatus = TokenizerStatus.text,
+    previousState: TokenizerState = .{
+        .status = TokenizerStatus.start,
+        .currentLine = 0,
+        .currentColumn = 0,
+    },
     /// currente status of the parser
-    status: TokenizerStatus = TokenizerStatus.text,
+    state: TokenizerState = .{
+        .status = TokenizerStatus.start,
+        .currentLine = 0,
+        .currentColumn = 0,
+    },
     currentLine: usize = 0,
     currentColumn: usize = 0,
 
@@ -438,8 +469,16 @@ pub const ZaxTokenizer = struct {
             .parserBufferLen = 0,
             .entityBuffer = [_]u21{0} ** 10,
             .entityBufferLen = 0,
-            .previousStatus = TokenizerStatus.text,
-            .status = TokenizerStatus.text,
+            .previousState = .{
+                .status = TokenizerStatus.start,
+                .currentLine = 0,
+                .currentColumn = 0,
+            },
+            .state = .{
+                .status = TokenizerStatus.start,
+                .currentLine = 0,
+                .currentColumn = 0,
+            },
             .currentLine = 0,
             .currentColumn = 0,
             //.allocator = allocator,
@@ -447,13 +486,13 @@ pub const ZaxTokenizer = struct {
     }
 
     /// Parsing xml text
-    pub fn parse(self: *ZaxTokenizer, xmlBytes: []const u8) !void {
+    pub fn parse(self: *ZaxTokenizer, xmlBytes: []const u8) XMLTokenizerError!void  {
         for (xmlBytes) |char| {
-            if (self.status == TokenizerStatus.start) {
+            if (self.state.status == TokenizerStatus.start) {
                 if (self.events.OnDocumentStart) |onDocumentStart| {
                     onDocumentStart();
                 }
-                self.status = TokenizerStatus.text;
+                self.state.status = TokenizerStatus.text;
                 self.parserBufferLen = 0;
             }
             if (self.options.rawstring.?) {
@@ -467,7 +506,7 @@ pub const ZaxTokenizer = struct {
                 if (self.remainingCharCode == -1) {
                     //raise an utf8 decoding error event
                     if (self.events.OnXMLErrors) |onXMLErrors| {
-                        onXMLErrors(XMLTokenizerError.XMLInvalidCharacterInTag, "Invalid UTF8 character");
+                        onXMLErrors(self.state, XMLTokenizerError.Utf8InvalidStartByte, "Invalid UTF8 character");
                     }
                 }
             } else {
@@ -478,29 +517,26 @@ pub const ZaxTokenizer = struct {
                 } else {
                     //raise an utf8 decoding error event
                     if (self.events.OnXMLErrors) |onXMLErrors| {
-                        onXMLErrors(XMLTokenizerError.XMLInvalidCharacterInTag, "Invalid UTF8 character");
+                        onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid UTF8 character");
                     }
                 }
             }
             if (self.remainingCharCode <= 0) {
                 //std.debug.print("fin de parsing de caractère {}\n", .{});
-                const unicodeChar = if (self.remainingCharCode < 0) 0xFFFD else try unicode.utf8Decode(self.parsedChar[0..self.parsedCharLen]);
+                const unicodeChar = if (self.remainingCharCode < 0) 0xFFFD else unicode.utf8Decode(self.parsedChar[0..self.parsedCharLen]) catch return XMLTokenizerError.Utf8DecodeError;
                 if (self.parsedCharLen == 1 and self.parsedChar[0] == '\n') {
-                    self.currentLine += 1;
-                    self.currentColumn = 0;
+                    self.state.currentLine += 1;
+                    self.state.currentColumn = 0;
                 } else {
-                    self.currentColumn += 1;
+                    self.state.currentColumn += 1;
                 }
                 //std.debug.print("l{d} c{d}\n", .{ self.currentLine, self.currentColumn });
-                switch (self.status) {
+                switch (self.state.status) {
                     .start => {},
                     .text => {
-                        std.debug.print("char {c}\n", .{char});
-                        //std.debug.print("fin de parsing de texte", .{});
                         try self.parseAsText(unicodeChar);
                     },
                     .entity => {
-                        //std.debug.print("fin de parsing de texte", .{});
                         try self.parseAsEntity(unicodeChar);
                     },
                     .tag => {
@@ -511,7 +547,7 @@ pub const ZaxTokenizer = struct {
                     .comment => {},
                     .processingInstruction => {},
                     .endTag => {},
-                    .startTag => {},
+                    .namedTag => {},
                     .attribute => {},
                     .attributeValue => {},
                     .doctypeSubset => {},
@@ -545,8 +581,8 @@ pub const ZaxTokenizer = struct {
             }
             self.parserBuffer[0] = char;
             self.parserBufferLen = 1;
-            self.previousStatus = self.status;
-            self.status = TokenizerStatus.entity;
+            self.previousState = self.state;
+            self.state.status = TokenizerStatus.entity;
         } else if (char == '<') {
             if (self.parserBufferLen > 0) {
                 if (self.events.OnText) |onText| {
@@ -555,8 +591,8 @@ pub const ZaxTokenizer = struct {
             }
             self.parserBuffer[0] = char;
             self.parserBufferLen = 1;
-            self.previousStatus = self.status;
-            self.status = TokenizerStatus.tag;
+            self.previousState = self.state;
+            self.state.status = TokenizerStatus.tag;
         } else {
             if (self.parserBufferLen == buffer_size) {
                 if (self.events.OnText) |onText| {
@@ -574,7 +610,7 @@ pub const ZaxTokenizer = struct {
             //if (self.options.preserve_entities) {}
             self.parserBuffer[self.parserBufferLen] = char;
             self.parserBufferLen += 1;
-            switch (self.previousStatus) {
+            switch (self.previousState.status) {
                 .text => {
                     if (self.events.OnText) |onText| {
                         onText(self.parserBuffer[0..self.parserBufferLen]);
@@ -589,19 +625,19 @@ pub const ZaxTokenizer = struct {
                 },
                 else => {
                     if (self.events.OnXMLErrors) |onXMLErrors| {
-                        onXMLErrors(XMLTokenizerError.XMLInvalidEntityStart, "Entity found in invalid context");
+                        onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Entity found in invalid context");
                     }
-                    self.status = TokenizerStatus.text;
+                    self.state.status = TokenizerStatus.text;
                     // TODO : raise malformed XML, unauthorized entity in current state
                     if (self.options.strict.?) {
-                        return XMLTokenizerError.XMLInvalidEntityStart;
+                        return XMLTokenizerError.XMLInvalidXML;
                     }
                 },
             }
             // TODO : raise malformed entity warning if entity is more than 10 chars
             self.parserBufferLen = 0;
-            self.status = self.previousStatus;
-            self.previousStatus = TokenizerStatus.entity;
+            self.state.status = self.previousState.status;
+            self.previousState.status = TokenizerStatus.entity;
         } else {
             self.parserBuffer[self.parserBufferLen] = char;
             self.parserBufferLen += 1;
@@ -611,14 +647,48 @@ pub const ZaxTokenizer = struct {
         self.parserBuffer[self.parserBufferLen] = char;
         self.parserBufferLen += 1;
         if (self.parserBufferLen == 2) {
-            if (self.parserBuffer[self.parserBufferLen - 1] == '/') {
-                self.status = TokenizerStatus.endTag;
+            if (char == '/') {
+                self.state.status = TokenizerStatus.endTag;
                 return;
             }
-            if (self.parserBuffer[self.parserBufferLen - 1] == '?') {
-                self.status = TokenizerStatus.processingInstruction;
+            if (char == '?') {
+                self.state.status = TokenizerStatus.processingInstruction;
                 return;
             }
+            if(isWhitespace(char)){
+                // Raise a warning about unescaped xml reserved char
+                if (self.events.OnXMLErrors) |onXMLErrors| {
+                    onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "space found after a '<' in content, is there an unescaped character ?");
+                }
+                if (self.events.OnText) |onText| {
+                    onText(self.parserBuffer[0..self.parserBufferLen]);
+                }
+                self.parserBufferLen = 0;
+                self.state.status = self.previousState.status;
+                return;
+            }
+
+        }
+        if(compareUnicodeWithString(self.parserBuffer[0..self.parserBufferLen], "<!--")){
+            self.state.status = TokenizerStatus.comment;
+            return;
+        }
+        if(compareUnicodeWithString(self.parserBuffer[0..self.parserBufferLen], "<![CDATA[")){
+            self.state.status = TokenizerStatus.cdata;
+            return;
+        }
+        if(compareUnicodeWithString(self.parserBuffer[0..self.parserBufferLen], "<!DOCTYPE")){
+            self.state.status = TokenizerStatus.cdata;
+            return;
+        }
+        
+        if(char == '>'){
+            // fin de namedtag, doit vérifier que le contenu est valide, sinon renvoyé un warning ou une erreur
+            
+            self.state.status = TokenizerStatus.text;
+        }
+        if(isWhitespace(char)){
+            self.state.status = TokenizerStatus.namedTag;
         }
     }
     //fn parseAsAttributeName(self: Self, char: u21) !void {}
@@ -627,3 +697,37 @@ pub const ZaxTokenizer = struct {
     //fn parseAsPI(self: Self, char: u21) !void {}
     //fn parseAsCDATA(self: Self, char: u21) !void {}
 };
+
+fn compareUnicodeWithString(lhs: []const u21, rhs: []const u8) bool{
+    // Both empty
+    if(lhs.len == 0 and rhs.len == 0) return true;
+    // Different sizes
+    if(lhs.len != rhs.len) return false;
+    // Char by char check
+    for(lhs, 0..) |char, index| {
+        if(char != rhs[index]){
+            return false;
+        }
+    }
+    return true;
+}
+
+///[#x1-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
+fn isXMLChar(char: u21) bool{
+    return (char >= 0x1 and char <= 0xD7FF)
+        or (char >= 0xE000 and char <= 0xFFFD)
+        or (char >= 0x10000 and char <= 0x10FFFF);
+}
+
+///[#x1-#x8] | [#xB-#xC] | [#xE-#x1F] | [#x7F-#x84] | [#x86-#x9F]
+fn isRestrictedXMLChar(char: u21) bool{
+    return (char >= 0x1 and char <= 0x8)
+        or (char >= 0xB and char <= 0xC)
+        or (char >= 0xE and char <= 0x1F)
+        or (char >= 0x7F and char <= 0x84)
+        or (char >= 0x86 and char <= 0x9F);
+}
+
+fn isWhitespace(char: u21) bool{
+    return (char == 0x20 or char == 0x9 or char == 0xD or char == 0xA);
+}
