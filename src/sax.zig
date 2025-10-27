@@ -372,7 +372,7 @@ pub const TokenizerEventsHandler = struct {
     OnDocumentStart: ?*const fn () void = undefined,
     OnDocumentEnd: ?*const fn () void = undefined,
     // Handle the start of a named tag (return the prefix and name)
-    OnOpeningTagStart: ?*const fn (name: []const u21) void = undefined,
+    OnNamedTagStart: ?*const fn (name: []const u21) void = undefined,
     // Handle attribute name
     OnAttributeName: ?*const fn (name: []const u21) void = undefined,
     // Handle attribute value
@@ -522,7 +522,6 @@ pub const ZaxTokenizer = struct {
                 }
             }
             if (self.remainingCharCode <= 0) {
-                //std.debug.print("fin de parsing de caractère {}\n", .{});
                 const unicodeChar = if (self.remainingCharCode < 0) 0xFFFD else unicode.utf8Decode(self.parsedChar[0..self.parsedCharLen]) catch return XMLTokenizerError.Utf8DecodeError;
                 if (self.parsedCharLen == 1 and self.parsedChar[0] == '\n') {
                     self.state.currentLine += 1;
@@ -648,28 +647,34 @@ pub const ZaxTokenizer = struct {
         self.parserBufferLen += 1;
         if (self.parserBufferLen == 2) {
             if (char == '/') {
+                // Closing tag
                 self.state.status = TokenizerStatus.endTag;
                 return;
             }
             if (char == '?') {
+                // Processing instruction start
                 self.state.status = TokenizerStatus.processingInstruction;
                 return;
             }
-            if(isWhitespace(char)){
-                // Raise a warning about unescaped xml reserved char
+            if(char == '!'){
+                // Continue parsing special data tag (doctype, comment or cdata)
+                return;
+            }
+            if(!isNameStartChar(char)){
                 if (self.events.OnXMLErrors) |onXMLErrors| {
-                    onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "space found after a '<' in content, is there an unescaped character ?");
+                    onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "invalid character found after a '<'");
                 }
+                // continue parsing as text
                 if (self.events.OnText) |onText| {
                     onText(self.parserBuffer[0..self.parserBufferLen]);
                 }
                 self.parserBufferLen = 0;
-                self.state.status = self.previousState.status;
+                self.state.status = TokenizerStatus.text;
                 return;
             }
-
         }
         if(compareUnicodeWithString(self.parserBuffer[0..self.parserBufferLen], "<!--")){
+            // continue parsing as comment
             self.state.status = TokenizerStatus.comment;
             return;
         }
@@ -681,15 +686,14 @@ pub const ZaxTokenizer = struct {
             self.state.status = TokenizerStatus.cdata;
             return;
         }
-        
         if(char == '>'){
             // fin de namedtag, doit vérifier que le contenu est valide, sinon renvoyé un warning ou une erreur
-            
+            if(self.events.OnNamedTagStart)|onNamedTagStart|{
+                _ = onNamedTagStart;
+            }
             self.state.status = TokenizerStatus.text;
         }
-        if(isWhitespace(char)){
-            self.state.status = TokenizerStatus.namedTag;
-        }
+        // Else continue parsing
     }
     //fn parseAsAttributeName(self: Self, char: u21) !void {}
     //fn parseAsAttributeValue(self: Self, char: u21) !void {}
@@ -730,4 +734,32 @@ fn isRestrictedXMLChar(char: u21) bool{
 
 fn isWhitespace(char: u21) bool{
     return (char == 0x20 or char == 0x9 or char == 0xD or char == 0xA);
+}
+
+fn isNameStartChar(char: u21) bool {
+    return char == ':' 
+        or (char >= 'A' and char <= 'Z')
+        or char == '_'
+        or (char >= 'a' and char <= 'z')
+        or (char >= 0xC0 and char <= 0xD6)
+        or (char >= 0xD8 and char <= 0xF6)
+        or (char >= 0xF8 and char <= 0x2FF)
+        or (char >= 0x370 and char <= 0x37D)
+        or (char >= 0x37F and char <= 0x1FFF) 
+        or (char >= 0x200C and char <= 0x200D)
+        or (char >= 0x2070 and char <= 0x218F)
+        or (char >= 0x2C00 and char <= 0x2FEF)
+        or (char >= 0x3001 and char <= 0xD7FF)
+        or (char >= 0xF900 and char <= 0xFDCF) 
+        or (char >= 0xFDF0 and char <= 0xFFFD)
+        or (char >= 0x10000 and char <= 0xEFFFF);
+}
+
+fn isNameChar(char: u21) bool {
+    return isNameStartChar(char)
+        or  char == '-' or char == '.'
+        or (char >= '0' and char <= '9')
+        or char == 0xB7
+        or (char >= 0x0300 and char <= 0x036F) 
+        or (char >= 0x203F and char <= 0x2040);
 }
