@@ -317,10 +317,6 @@ pub const Doctype = struct {
     subset: ?[]u8,
 };
 
-
-
-
-
 const TokenizerStatus = enum {
     /// Document starting
     start,
@@ -349,16 +345,11 @@ const TokenizerStatus = enum {
     /// After
     doctypeSubset,
     /// End of document
-    // 
+    //
     end,
 };
 
-const XMLTokenizerError = error{
-    XMLInvalidXML,
-    Utf8InvalidStartByte,
-    Utf8DecodeError
-};
-
+const XMLTokenizerError = error{ XMLInvalidXML, Utf8InvalidStartByte, Utf8DecodeError };
 
 pub const TokenizerState = struct {
     status: TokenizerStatus = TokenizerStatus.start,
@@ -371,39 +362,53 @@ pub const TokenizerEventsHandler = struct {
     // Start the parser
     OnDocumentStart: ?*const fn () void = undefined,
     OnDocumentEnd: ?*const fn () void = undefined,
-    // Handle the start of a named tag (return the prefix and name)
+    /// Handle the start of a named tag (return the fullname including prefix if any)
     OnNamedTagStart: ?*const fn (name: []const u21) void = undefined,
-    // Handle attribute name
+    /// Handle attribute name
     OnAttributeName: ?*const fn (name: []const u21) void = undefined,
-    // Handle attribute value
+    /// Handle attribute value start with " or ' delimiter
     OnAttributeValueStart: ?*const fn (delimiter: u21) void = undefined,
+    /// Handle attribute value content (can be raised multiple times if entity is found)
     OnAttributeValueContent: ?*const fn (content: []const u21) void = undefined,
+    /// Handle attribute end (previous delimiter was found)
     OnAttributeValueEnd: ?*const fn () void = undefined,
-    // Handle the closing of a named tag (including if it is selfclosing)
-    OnOpeningTagEnd: ?*const fn (selfclosing: bool) void = undefined,
-    // Handle the closing of a named tag
+    /// Handle the closing of a named tag (including if it is selfclosing or not)
+    OnNamedTagEnd: ?*const fn (selfclosing: bool) void = undefined,
+    /// Handle a closing tag
     OnClosingTag: ?*const fn (name: []const u21, prefixEnd: u32) void = undefined,
-    // Handle doctype main part
-    OnDoctypeStart: ?*const fn (doctype: Doctype) void = undefined,
-    // Handle doctype subset
+    /// Handle doctype opening found
+    OnDoctypeStart: ?*const fn () void = undefined,
+    /// Handle doctype content (content within <!DOCTYPE and >)
+    OnDoctypeContent: ?*const fn (content: []const u21) void = undefined,
+    /// Handle doctype subset start found (character [ found while parsing doctype content )
     OnDoctypeSubsetStart: ?*const fn () void = undefined,
+    /// Handle doctype subset content (content within [ and ] in DOCTYPE)
     OnDoctypeSubsetContent: ?*const fn (content: []const u21) void = undefined,
+    /// Handle doctype subset end
     OnDoctypeSubsetEnd: ?*const fn () void = undefined,
+    /// Handle doctype end (> found in doctype or after subset end)
     OnDoctypeEnd: ?*const fn () void = undefined,
-    // Handle comment
+    /// Handle comment start found
     OnCommentStart: ?*const fn () void = undefined,
+    /// Handle comment content
     OnCommentContent: ?*const fn (content: []const u21) void = undefined,
+    /// Handle comment end found
     OnCommentEnd: ?*const fn () void = undefined,
-    // Handle cdata
+    /// Handle cdata start found
     OnCDATAStart: ?*const fn () void = undefined,
+    /// Handle cdata content
     OnCDATAContent: ?*const fn (content: []const u21) void = undefined,
+    /// Handle cdata end found ]]>
     OnCDATAEnd: ?*const fn () void = undefined,
-    // Handle processing instructions
+    /// Handle processing instructions start found (<?)
     OnProcessingInstructionStart: ?*const fn () void = undefined,
-    OnProcessingInstructionContent: ?*const fn () void = undefined,
+    /// Handle processing instruction content
+    OnProcessingInstructionContent: ?*const fn (content: []const u21) void = undefined,
+    /// Handle processing instruction end found (?>)
     OnProcessingInstructionEnd: ?*const fn () void = undefined,
-    // Handle text nodes
+    /// Handle text nodes
     OnText: ?*const fn (text: []const u21) void = undefined,
+    /// Handle XML errors found during parsing
     OnXMLErrors: ?*const fn (state: TokenizerState, xmlError: XMLTokenizerError, message: []const u8) void = undefined,
 };
 
@@ -425,7 +430,6 @@ fn isUtf8Part(char: u8) bool {
     return (char & 0b1100_0000) == 0b1000_0000;
 }
 
-
 /// Zax tokenizer to parse xml content with a fixed size buffer
 ///
 /// buffer_size : number of characters utf8 to bufferize
@@ -441,8 +445,9 @@ pub const ZaxTokenizer = struct {
     remainingCharCode: i8 = 0,
     parserBuffer: [buffer_size]u21 = [_]u21{0} ** buffer_size,
     parserBufferLen: usize = 0,
-    entityBuffer: [10]u21 = [_]u21{0} ** 10, // entity has max 10 characters
-    entityBufferLen: usize = 0,
+    delimiter: u21 = 0,
+    //entityBuffer: [10]u21 = [_]u21{0} ** 10, // entity has max 10 characters
+    //entityBufferLen: usize = 0,
     /// previous status of the parser to recover from errors
     previousState: TokenizerState = .{
         .status = TokenizerStatus.start,
@@ -455,8 +460,6 @@ pub const ZaxTokenizer = struct {
         .currentLine = 0,
         .currentColumn = 0,
     },
-    currentLine: usize = 0,
-    currentColumn: usize = 0,
 
     pub fn init(events: TokenizerEventsHandler, options: ParserOptions) ZaxTokenizer {
         return ZaxTokenizer{
@@ -467,8 +470,8 @@ pub const ZaxTokenizer = struct {
             .remainingCharCode = 0,
             .parserBuffer = [_]u21{0} ** buffer_size,
             .parserBufferLen = 0,
-            .entityBuffer = [_]u21{0} ** 10,
-            .entityBufferLen = 0,
+            //.entityBuffer = [_]u21{0} ** 10,
+            //.entityBufferLen = 0,
             .previousState = .{
                 .status = TokenizerStatus.start,
                 .currentLine = 0,
@@ -479,14 +482,12 @@ pub const ZaxTokenizer = struct {
                 .currentLine = 0,
                 .currentColumn = 0,
             },
-            .currentLine = 0,
-            .currentColumn = 0,
             //.allocator = allocator,
         };
     }
 
     /// Parsing xml text
-    pub fn parse(self: *ZaxTokenizer, xmlBytes: []const u8) XMLTokenizerError!void  {
+    pub fn parse(self: *ZaxTokenizer, xmlBytes: []const u8) XMLTokenizerError!void {
         for (xmlBytes) |char| {
             if (self.state.status == TokenizerStatus.start) {
                 if (self.events.OnDocumentStart) |onDocumentStart| {
@@ -542,6 +543,7 @@ pub const ZaxTokenizer = struct {
                         try self.parseAsOpeningTag(unicodeChar);
                     },
                     .doctype => {},
+                    .doctypeSubset => {},
                     .cdata => {},
                     .comment => {},
                     .processingInstruction => {},
@@ -549,7 +551,6 @@ pub const ZaxTokenizer = struct {
                     .namedTag => {},
                     .attribute => {},
                     .attributeValue => {},
-                    .doctypeSubset => {},
                     .end => {},
                 }
                 self.parsedChar = [_]u8{0} ** 4;
@@ -653,14 +654,17 @@ pub const ZaxTokenizer = struct {
             }
             if (char == '?') {
                 // Processing instruction start
+                if (self.events.OnProcessingInstructionStart) |onPIStart| {
+                    onPIStart();
+                }
                 self.state.status = TokenizerStatus.processingInstruction;
                 return;
             }
-            if(char == '!'){
+            if (char == '!') {
                 // Continue parsing special data tag (doctype, comment or cdata)
                 return;
             }
-            if(!isNameStartChar(char)){
+            if (!isNameStartChar(char)) {
                 if (self.events.OnXMLErrors) |onXMLErrors| {
                     onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "invalid character found after a '<'");
                 }
@@ -673,27 +677,117 @@ pub const ZaxTokenizer = struct {
                 return;
             }
         }
-        if(compareUnicodeWithString(self.parserBuffer[0..self.parserBufferLen], "<!--")){
+        if (compareUnicodeWithString(self.parserBuffer[0..self.parserBufferLen], "<!--")) {
             // continue parsing as comment
+            if (self.events.OnCommentStart) |onCommentStart| {
+                onCommentStart();
+            }
             self.state.status = TokenizerStatus.comment;
             return;
         }
-        if(compareUnicodeWithString(self.parserBuffer[0..self.parserBufferLen], "<![CDATA[")){
-            self.state.status = TokenizerStatus.cdata;
-            return;
-        }
-        if(compareUnicodeWithString(self.parserBuffer[0..self.parserBufferLen], "<!DOCTYPE")){
-            self.state.status = TokenizerStatus.cdata;
-            return;
-        }
-        if(char == '>'){
-            // fin de namedtag, doit vérifier que le contenu est valide, sinon renvoyé un warning ou une erreur
-            if(self.events.OnNamedTagStart)|onNamedTagStart|{
-                _ = onNamedTagStart;
+        if (compareUnicodeWithString(self.parserBuffer[0..self.parserBufferLen], "<![CDATA[")) {
+            // Parsing as cdata
+            if (self.events.OnCDATAStart) |onCDATAStart| {
+                onCDATAStart();
             }
+            self.state.status = TokenizerStatus.cdata;
+            return;
+        }
+        if (compareUnicodeWithString(self.parserBuffer[0..self.parserBufferLen], "<!DOCTYPE")) {
+            // Parsing as doctype
+            if (self.events.OnDoctypeStart) |onDoctypeStart| {
+                onDoctypeStart();
+            }
+            self.state.status = TokenizerStatus.doctype;
+            return;
+        }
+
+        if (char == '>') {
+            const isSelfClosing = if (self.parserBuffer[self.parserBufferLen - 2] == '/') true else false;
+            const nameEndIndex = if (isSelfClosing) self.parserBufferLen - 2 else self.parserBufferLen - 1;
+            // fin de namedtag, doit vérifier que le contenu est valide, sinon renvoyé un warning ou une erreur
+            if (self.events.OnNamedTagStart) |onNamedTagStart| {
+                onNamedTagStart(self.parserBuffer[1..nameEndIndex]);
+            }
+            if (self.events.OnNamedTagEnd) |onNamedTagEnd| {
+                onNamedTagEnd(isSelfClosing);
+            }
+            self.parserBufferLen = 0;
             self.state.status = TokenizerStatus.text;
+            return;
+        }
+        if (isWhitespace(char)) {
+            const nameEndIndex = self.parserBufferLen - 1;
+            // fin de namedtag, doit vérifier que le contenu est valide, sinon renvoyé un warning ou une erreur
+            if (self.events.OnNamedTagStart) |onNamedTagStart| {
+                onNamedTagStart(self.parserBuffer[1..nameEndIndex]);
+            }
+            self.parserBufferLen = 0;
+            self.state.status = TokenizerStatus.namedTag;
+            return;
         }
         // Else continue parsing
+    }
+
+    fn parseAsNamedTag(self: *ZaxTokenizer, char: u21) !void {
+        if (isNameChar(char)) {
+            self.parserBuffer[self.parserBufferLen] = char;
+            self.parserBufferLen += 1;
+            self.state.status = TokenizerStatus.attribute;
+            return;
+        }
+
+        switch (char) {
+            '<', '&' => {
+                // Invalid character in named tag
+                if (self.events.OnXMLErrors) |onXMLErrors| {
+                    onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid character found in tag name");
+                }
+                // Fallback to text parsing
+                self.state.status = TokenizerStatus.text;
+                // TODO : raise malformed XML error
+                if (self.options.strict.?) {
+                    return XMLTokenizerError.XMLInvalidXML;
+                }
+            },
+        }
+        if (isNameChar(char)) {
+            self.parserBuffer[self.parserBufferLen] = char;
+            self.parserBufferLen += 1;
+        } else if (isWhitespace(char)) {
+            // End of named tag, continue to attributes parsing
+            if (self.events.OnNamedTagStart) |onNamedTagStart| {
+                onNamedTagStart(self.parserBuffer[0..self.parserBufferLen]);
+            }
+            self.parserBufferLen = 0;
+            self.state.status = TokenizerStatus.attribute;
+        } else if (char == '/') {
+            // Self closing tag
+            if (self.events.OnNamedTagStart) |onNamedTagStart| {
+                onNamedTagStart(self.parserBuffer[0..self.parserBufferLen]);
+            }
+            self.parserBufferLen = 0;
+            self.state.status = TokenizerStatus.tag;
+        } else if (char == '>') {
+            // End of named tag
+            if (self.events.OnNamedTagStart) |onNamedTagStart| {
+                onNamedTagStart(self.parserBuffer[0..self.parserBufferLen]);
+            }
+            if (self.events.OnNamedTagEnd) |onNamedTagEnd| {
+                onNamedTagEnd(false);
+            }
+            self.parserBufferLen = 0;
+            self.state.status = TokenizerStatus.text;
+        } else {
+            // Invalid character in named tag
+            if (self.events.OnXMLErrors) |onXMLErrors| {
+                onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid character found in tag name");
+            }
+            // TODO : raise malformed XML error
+            if (self.options.strict.?) {
+                return XMLTokenizerError.XMLInvalidXML;
+            }
+        }
     }
     //fn parseAsAttributeName(self: Self, char: u21) !void {}
     //fn parseAsAttributeValue(self: Self, char: u21) !void {}
@@ -702,14 +796,14 @@ pub const ZaxTokenizer = struct {
     //fn parseAsCDATA(self: Self, char: u21) !void {}
 };
 
-fn compareUnicodeWithString(lhs: []const u21, rhs: []const u8) bool{
+fn compareUnicodeWithString(lhs: []const u21, rhs: []const u8) bool {
     // Both empty
-    if(lhs.len == 0 and rhs.len == 0) return true;
+    if (lhs.len == 0 and rhs.len == 0) return true;
     // Different sizes
-    if(lhs.len != rhs.len) return false;
+    if (lhs.len != rhs.len) return false;
     // Char by char check
-    for(lhs, 0..) |char, index| {
-        if(char != rhs[index]){
+    for (lhs, 0..) |char, index| {
+        if (char != rhs[index]) {
             return false;
         }
     }
@@ -717,49 +811,23 @@ fn compareUnicodeWithString(lhs: []const u21, rhs: []const u8) bool{
 }
 
 ///[#x1-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
-fn isXMLChar(char: u21) bool{
-    return (char >= 0x1 and char <= 0xD7FF)
-        or (char >= 0xE000 and char <= 0xFFFD)
-        or (char >= 0x10000 and char <= 0x10FFFF);
+fn isXMLChar(char: u21) bool {
+    return (char >= 0x1 and char <= 0xD7FF) or (char >= 0xE000 and char <= 0xFFFD) or (char >= 0x10000 and char <= 0x10FFFF);
 }
 
 ///[#x1-#x8] | [#xB-#xC] | [#xE-#x1F] | [#x7F-#x84] | [#x86-#x9F]
-fn isRestrictedXMLChar(char: u21) bool{
-    return (char >= 0x1 and char <= 0x8)
-        or (char >= 0xB and char <= 0xC)
-        or (char >= 0xE and char <= 0x1F)
-        or (char >= 0x7F and char <= 0x84)
-        or (char >= 0x86 and char <= 0x9F);
+fn isRestrictedXMLChar(char: u21) bool {
+    return (char >= 0x1 and char <= 0x8) or (char >= 0xB and char <= 0xC) or (char >= 0xE and char <= 0x1F) or (char >= 0x7F and char <= 0x84) or (char >= 0x86 and char <= 0x9F);
 }
 
-fn isWhitespace(char: u21) bool{
+fn isWhitespace(char: u21) bool {
     return (char == 0x20 or char == 0x9 or char == 0xD or char == 0xA);
 }
 
 fn isNameStartChar(char: u21) bool {
-    return char == ':' 
-        or (char >= 'A' and char <= 'Z')
-        or char == '_'
-        or (char >= 'a' and char <= 'z')
-        or (char >= 0xC0 and char <= 0xD6)
-        or (char >= 0xD8 and char <= 0xF6)
-        or (char >= 0xF8 and char <= 0x2FF)
-        or (char >= 0x370 and char <= 0x37D)
-        or (char >= 0x37F and char <= 0x1FFF) 
-        or (char >= 0x200C and char <= 0x200D)
-        or (char >= 0x2070 and char <= 0x218F)
-        or (char >= 0x2C00 and char <= 0x2FEF)
-        or (char >= 0x3001 and char <= 0xD7FF)
-        or (char >= 0xF900 and char <= 0xFDCF) 
-        or (char >= 0xFDF0 and char <= 0xFFFD)
-        or (char >= 0x10000 and char <= 0xEFFFF);
+    return char == ':' or (char >= 'A' and char <= 'Z') or char == '_' or (char >= 'a' and char <= 'z') or (char >= 0xC0 and char <= 0xD6) or (char >= 0xD8 and char <= 0xF6) or (char >= 0xF8 and char <= 0x2FF) or (char >= 0x370 and char <= 0x37D) or (char >= 0x37F and char <= 0x1FFF) or (char >= 0x200C and char <= 0x200D) or (char >= 0x2070 and char <= 0x218F) or (char >= 0x2C00 and char <= 0x2FEF) or (char >= 0x3001 and char <= 0xD7FF) or (char >= 0xF900 and char <= 0xFDCF) or (char >= 0xFDF0 and char <= 0xFFFD) or (char >= 0x10000 and char <= 0xEFFFF);
 }
 
 fn isNameChar(char: u21) bool {
-    return isNameStartChar(char)
-        or  char == '-' or char == '.'
-        or (char >= '0' and char <= '9')
-        or char == 0xB7
-        or (char >= 0x0300 and char <= 0x036F) 
-        or (char >= 0x203F and char <= 0x2040);
+    return isNameStartChar(char) or char == '-' or char == '.' or (char >= '0' and char <= '9') or char == 0xB7 or (char >= 0x0300 and char <= 0x036F) or (char >= 0x203F and char <= 0x2040);
 }
