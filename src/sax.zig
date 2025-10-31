@@ -329,6 +329,8 @@ const TokenizerStatus = enum {
     dataTag, // tag state + '!' found in parsed buffer, continue to check if doctype, cdata or comment
     /// Parsing <!DOCTYPE element
     doctype, // tag state + "!DOCTYPE" found in parsed buffer parsing as content until '>' or '[' found
+    //doctypeRoot, // Parsing doctype root element name
+    doctypeSubset,
     /// Parsing <![CDATA[ element
     cdata, // tag state + "![CDATA[" found in parsed buffer, back to text when ends with "]]>"
     /// Parsing <!--
@@ -345,8 +347,6 @@ const TokenizerStatus = enum {
     attribute,
     /// After attribute, parsing text until delimiter
     attributeValue,
-    /// After
-    doctypeSubset,
     /// End of document
     //
     end,
@@ -546,7 +546,7 @@ pub const ZaxTokenizer = struct {
                         try self.parseAsOpeningTag(unicodeChar);
                     },
                     .dataTag => {
-                        // TODO : implement data tag parsing
+                        try self.parseAsDataTag(unicodeChar);
                     },
                     .doctype => {},
                     .doctypeSubset => {},
@@ -554,9 +554,13 @@ pub const ZaxTokenizer = struct {
                     .comment => {},
                     .processingInstruction => {},
                     .processingInstructionContent => {},
-                    .selfClosingNamedTag => {},
+                    .selfClosingNamedTag => {
+                        try self.parseAsNamedTag(unicodeChar, true);
+                    },
                     .endTag => {},
-                    .namedTag => {},
+                    .namedTag => {
+                        try self.parseAsNamedTag(unicodeChar, false);
+                    },
                     .attribute => {},
                     .attributeValue => {},
                     .end => {},
@@ -684,6 +688,7 @@ pub const ZaxTokenizer = struct {
                             onText(self.parserBuffer[0..self.parserBufferLen]);
                         }
                         self.parserBufferLen = 0;
+                        // resuming parsing as text
                         self.state.status = TokenizerStatus.text;
                         return;
                     }
@@ -781,9 +786,9 @@ pub const ZaxTokenizer = struct {
     }
 
     fn parseAsNamedTag(self: *ZaxTokenizer, char: u21, selfClosing: bool) !void {
+        self.parserBuffer[self.parserBufferLen] = char;
+        self.parserBufferLen += 1;
         if (selfClosing) {
-            self.parserBuffer[self.parserBufferLen] = char;
-            self.parserBufferLen += 1;
             if (char == '>') {
                 if (self.events.OnNamedTagEnd) |onNamedTagEnd| {
                     onNamedTagEnd(true);
@@ -804,8 +809,6 @@ pub const ZaxTokenizer = struct {
                 }
             }
         } else if (isNameChar(char)) {
-            self.parserBuffer[self.parserBufferLen] = char;
-            self.parserBufferLen += 1;
             self.state.status = TokenizerStatus.attribute;
             return;
         } else if (isWhitespace(char)) {
@@ -813,75 +816,78 @@ pub const ZaxTokenizer = struct {
             return;
         } else if (char == '/') {
             // Self closing tag
-            if (self.events.OnNamedTagStart) |onNamedTagStart| {
-                onNamedTagStart(self.parserBuffer[0..self.parserBufferLen]);
-            }
-            self.parserBufferLen = 0;
-            self.state.status = TokenizerStatus.tag;
+            self.state.status = TokenizerStatus.selfClosingNamedTag;
             return;
         } else if (char == '>') {
             // End of named tag
-            if (self.events.OnNamedTagStart) |onNamedTagStart| {
-                onNamedTagStart(self.parserBuffer[0..self.parserBufferLen]);
-            }
             if (self.events.OnNamedTagEnd) |onNamedTagEnd| {
                 onNamedTagEnd(false);
             }
             self.parserBufferLen = 0;
             self.state.status = TokenizerStatus.text;
             return;
-        }
-
-        switch (char) {
-            '<', '&' => {
-                // Invalid character in named tag
-                if (self.events.OnXMLErrors) |onXMLErrors| {
-                    onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid character found in tag name");
-                }
-                // Fallback to text parsing
-                self.state.status = TokenizerStatus.text;
-                // TODO : raise malformed XML error
-                if (self.options.strict.?) {
-                    return XMLTokenizerError.XMLInvalidXML;
-                }
-            },
-        }
-        if (isNameChar(char)) {
-            self.parserBuffer[self.parserBufferLen] = char;
-            self.parserBufferLen += 1;
-        } else if (isWhitespace(char)) {
-            // End of named tag, continue to attributes parsing
-            if (self.events.OnNamedTagStart) |onNamedTagStart| {
-                onNamedTagStart(self.parserBuffer[0..self.parserBufferLen]);
-            }
-            self.parserBufferLen = 0;
-            self.state.status = TokenizerStatus.attribute;
-        } else if (char == '/') {
-            // Self closing tag
-            if (self.events.OnNamedTagStart) |onNamedTagStart| {
-                onNamedTagStart(self.parserBuffer[0..self.parserBufferLen]);
-            }
-            self.parserBufferLen = 0;
-            self.state.status = TokenizerStatus.tag;
-        } else if (char == '>') {
-            // End of named tag
-            if (self.events.OnNamedTagStart) |onNamedTagStart| {
-                onNamedTagStart(self.parserBuffer[0..self.parserBufferLen]);
-            }
-            if (self.events.OnNamedTagEnd) |onNamedTagEnd| {
-                onNamedTagEnd(false);
-            }
-            self.parserBufferLen = 0;
-            self.state.status = TokenizerStatus.text;
         } else {
             // Invalid character in named tag
             if (self.events.OnXMLErrors) |onXMLErrors| {
-                onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid character found in tag name");
+                onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid character found in namedtag");
             }
             // TODO : raise malformed XML error
             if (self.options.strict.?) {
                 return XMLTokenizerError.XMLInvalidXML;
             }
+        }
+    }
+
+    /// Parsing <!DOCTYPE ... > declaration
+    /// For now, i'm not validating content structure
+    fn parseAsDoctype(self: *ZaxTokenizer, char: u21) !void {
+        self.parserBuffer[self.parserBufferLen] = char;
+        self.parserBufferLen += 1;
+        if (char == '[') {
+            // Start of doctype subset
+            if (self.events.OnDoctypeContent) |onDoctypeContent| {
+                onDoctypeContent(self.parserBuffer[0 .. self.parserBufferLen - 1]);
+            }
+            if (self.events.OnDoctypeSubsetStart) |onDoctypeSubsetStart| {
+                onDoctypeSubsetStart();
+            }
+            self.parserBufferLen = 0;
+            self.state.status = TokenizerStatus.doctypeSubset;
+            return;
+        } else if (char == '>') {
+            // End of doctype declaration
+            if (self.events.OnDoctypeContent) |onDoctypeContent| {
+                onDoctypeContent(self.parserBuffer[0 .. self.parserBufferLen - 1]);
+            }
+            if (self.events.OnDoctypeEnd) |onDoctypeEnd| {
+                onDoctypeEnd();
+            }
+            self.parserBufferLen = 0;
+            self.state.status = TokenizerStatus.text;
+            return;
+        } else {
+            // Continue parsing doctype content
+            return;
+        }
+    }
+
+    fn parseAsDoctypeSubset(self: *ZaxTokenizer, char: u21) !void {
+        self.parserBuffer[self.parserBufferLen] = char;
+        self.parserBufferLen += 1;
+        if (char == ']') {
+            // End of doctype subset
+            if (self.events.OnDoctypeSubsetContent) |onDoctypeSubsetContent| {
+                onDoctypeSubsetContent(self.parserBuffer[0 .. self.parserBufferLen - 1]);
+            }
+            if (self.events.OnDoctypeSubsetEnd) |onDoctypeSubsetEnd| {
+                onDoctypeSubsetEnd();
+            }
+            self.parserBufferLen = 0;
+            self.state.status = TokenizerStatus.doctype;
+            return;
+        } else {
+            // Continue parsing doctype subset content
+            return;
         }
     }
     //fn parseAsAttributeName(self: Self, char: u21) !void {}
