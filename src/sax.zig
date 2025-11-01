@@ -329,7 +329,10 @@ const TokenizerStatus = enum {
     dataTag, // tag state + '!' found in parsed buffer, continue to check if doctype, cdata or comment
     /// Parsing <!DOCTYPE element
     doctype, // tag state + "!DOCTYPE" found in parsed buffer parsing as content until '>' or '[' found
-    //doctypeRoot, // Parsing doctype root element name
+    doctypeRoot, // Parsing doctype root element name
+    doctypeType, // Parsing doctype type (SYSTEM or PUBLIC)
+    doctypePublicId, // Parsing doctype public identifier
+    doctypeSystemId, // Parsing doctype system identifier
     doctypeSubset,
     /// Parsing <![CDATA[ element
     cdata, // tag state + "![CDATA[" found in parsed buffer, back to text when ends with "]]>"
@@ -616,6 +619,8 @@ pub const ZaxTokenizer = struct {
             self.parserBufferLen += 1;
         }
     }
+
+    /// Parse as entity after '&' found in text or attribute value status (parser should be containing '&' at index 0)
     fn parseAsEntity(self: *ZaxTokenizer, char: u21) !void {
         if (char == ';' or self.parserBufferLen >= 10) {
             // (sinon a la place de la taille, vérifier si un caractère non authorisé est rencontré)
@@ -735,6 +740,97 @@ pub const ZaxTokenizer = struct {
             self.state.status = TokenizerStatus.text;
             return;
         } // else continue parsing as named tag
+    }
+
+    fn parseAsPI(self: *ZaxTokenizer, char: u21, inContent: bool) !void {
+        self.parserBuffer[self.parserBufferLen] = char;
+        self.parserBufferLen += 1;
+        if (inContent) { // parse as content until '?>' found
+            if (compareUnicodeWithString(self.parserBuffer[self.parserBufferLen - 2 .. self.parserBufferLen], "?>")) {
+                if (self.events.OnProcessingInstructionContent) |OnProcessingInstructionContent| {
+                    OnProcessingInstructionContent(self.parserBuffer[0 .. self.parserBufferLen - 2]);
+                }
+                // end of processing instruction
+                if (self.events.OnProcessingInstructionEnd) |onProcessingInstructionEnd| {
+                    onProcessingInstructionEnd();
+                }
+                self.parserBufferLen = 0;
+                self.state.status = TokenizerStatus.text;
+                return;
+            }
+            return;
+        } else if (isWhitespace(char)) {
+            if (self.parserBufferLen > 3) { // <?a (at least) in parser
+                // target found, raise event
+                if (self.events.OnProcessingInstructionStart) |onProcessingInstructionStart| {
+                    onProcessingInstructionStart(self.parserBuffer[2 .. self.parserBufferLen - 1]);
+                }
+                self.parserBufferLen = 0;
+                self.state.status = TokenizerStatus.processingInstructionContent;
+                return;
+            } else {
+                // Invalid PI target name
+                if (self.events.OnXMLErrors) |onXMLErrors| {
+                    onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid processing instruction target name");
+                }
+                // Fallback to text parsing
+                self.state.status = TokenizerStatus.text;
+                // TODO : raise malformed XML error
+                if (self.options.strict.?) {
+                    return XMLTokenizerError.XMLInvalidXML;
+                }
+            }
+        } else if (char == '?') {
+            if (self.parserBufferLen == 3) { //<??
+                // Invalid PI target name
+                if (self.events.OnXMLErrors) |onXMLErrors| {
+                    onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid processing instruction target name");
+                }
+                // Fallback to text parsing
+                self.state.status = TokenizerStatus.text;
+                // TODO : raise malformed XML error
+                if (self.options.strict.?) {
+                    return XMLTokenizerError.XMLInvalidXML;
+                }
+            }
+            // Continue parsing possible end of processing instruction
+            return;
+        } else if (char == '>') {
+            if (self.parserBufferLen > 4 and compareUnicodeWithString(self.parserBuffer[self.parserBufferLen - 2 .. self.parserBufferLen], "?>")) {
+                // end of processing instruction with content
+                if (self.events.OnProcessingInstructionStart) |onProcessingInstructionStart| {
+                    onProcessingInstructionStart(self.parserBuffer[2 .. self.parserBufferLen - 3]);
+                }
+                if (self.events.OnProcessingInstructionEnd) |onProcessingInstructionEnd| {
+                    onProcessingInstructionEnd();
+                }
+                self.parserBufferLen = 0;
+                self.state.status = TokenizerStatus.text;
+                return;
+            }
+
+            // end of processing instruction without content
+            if (self.events.OnProcessingInstructionStart) |onProcessingInstructionStart| {
+                onProcessingInstructionStart(self.parserBuffer[2 .. self.parserBufferLen - 2]);
+            }
+            if (self.events.OnProcessingInstructionEnd) |onProcessingInstructionEnd| {
+                onProcessingInstructionEnd();
+            }
+            self.parserBufferLen = 0;
+            self.state.status = TokenizerStatus.text;
+            return;
+        } else if (!isNameChar(char)) {
+            // Invalid PI target name
+            if (self.events.OnXMLErrors) |onXMLErrors| {
+                onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid processing instruction target name");
+            }
+            // Fallback to text parsing
+            self.state.status = TokenizerStatus.text;
+            // TODO : raise malformed XML error
+            if (self.options.strict.?) {
+                return XMLTokenizerError.XMLInvalidXML;
+            }
+        }
     }
     /// parsing <! starting tag to determine if comment, cdata or doctype
     fn parseAsDataTag(self: *ZaxTokenizer, char: u21) !void {
@@ -912,12 +1008,12 @@ fn compareUnicodeWithString(lhs: []const u21, rhs: []const u8) bool {
 }
 
 ///[#x1-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
-fn isXMLChar(char: u21) bool {
+fn isChar(char: u21) bool {
     return (char >= 0x1 and char <= 0xD7FF) or (char >= 0xE000 and char <= 0xFFFD) or (char >= 0x10000 and char <= 0x10FFFF);
 }
 
 ///[#x1-#x8] | [#xB-#xC] | [#xE-#x1F] | [#x7F-#x84] | [#x86-#x9F]
-fn isRestrictedXMLChar(char: u21) bool {
+fn isRestrictedChar(char: u21) bool {
     return (char >= 0x1 and char <= 0x8) or (char >= 0xB and char <= 0xC) or (char >= 0xE and char <= 0x1F) or (char >= 0x7F and char <= 0x84) or (char >= 0x86 and char <= 0x9F);
 }
 
