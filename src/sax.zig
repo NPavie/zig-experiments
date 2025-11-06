@@ -456,6 +456,7 @@ pub const ZaxTokenizer = struct {
     remainingCharCode: i8 = 0,
     parserBuffer: [buffer_size]u21 = [_]u21{0} ** buffer_size,
     parserBufferLen: usize = 0,
+    contentStartInBuffer: usize = 0,
     delimiter: u21 = 0, // " or '
     //entityBuffer: [10]u21 = [_]u21{0} ** 10, // entity has max 10 characters
     //entityBufferLen: usize = 0,
@@ -934,6 +935,7 @@ pub const ZaxTokenizer = struct {
                 }
             }
         } else if (isNameChar(char)) {
+            self.contentStartInBuffer = self.parserBufferLen - 1;
             self.changeState(TokenizerStatus.attribute);
             return;
         } else if (isWhitespace(char)) {
@@ -1263,8 +1265,80 @@ pub const ZaxTokenizer = struct {
             return;
         }
     }
+    fn parseAsAttributeName(self: *ZaxTokenizer, char: u21) !void {
+        self.parserBuffer[self.parserBufferLen] = char;
+        self.parserBufferLen += 1;
+        if (isNameChar(char)) {
+            // Continue parsing attribute name
+            return;
+        } else if (char == '=') {
+            // End of attribute name
+            if (self.events.OnAttributeName) |onAttributeName| {
+                onAttributeName(self.parserBuffer[self.contentStartInBuffer .. self.parserBufferLen - 1]);
+            }
+            self.contentStartInBuffer = 0;
+            self.parserBufferLen = 0;
+            self.changeState(TokenizerStatus.attributeValue);
+            return;
+        } else {
+            // Invalid character found in attribute name
+            if (self.events.OnXMLErrors) |onXMLErrors| {
+                onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid character found in attribute name");
+            }
+            // Fallback to text parsing
+            self.changeState(TokenizerStatus.tag);
+            // TODO : raise malformed XML error
+            if (self.options.strict.?) {
+                return XMLTokenizerError.XMLInvalidXML;
+            }
+        }
+    }
+
+    fn parseAsAttributeValue(self: *ZaxTokenizer, char: u21) !void {
+        self.parserBuffer[self.parserBufferLen] = char;
+        self.parserBufferLen += 1;
+        if (self.delimiter == 0) {
+            if (char == '"' or char == '\'') {
+                self.delimiter = char;
+                if (self.events.OnAttributeValueStart) |onAttributeValueStart| {
+                    onAttributeValueStart(char);
+                }
+                self.parserBufferLen = 0;
+                return;
+            } else {
+                // Invalid character found while parsing attribute value
+                if (self.events.OnXMLErrors) |onXMLErrors| {
+                    onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid character found while parsing attribute value");
+                }
+                // Fallback to text parsing
+                self.changeState(TokenizerStatus.namedTag);
+                // TODO : raise malformed XML error
+                if (self.options.strict.?) {
+                    return XMLTokenizerError.XMLInvalidXML;
+                }
+            }
+        } else if (char == self.delimiter) {
+            // End of attribute value
+            if (self.events.OnAttributeValueContent) |onAttributeValueContent| {
+                onAttributeValueContent(self.parserBuffer[0..self.parserBufferLen]);
+            }
+            if (self.events.OnAttributeValueEnd) |onAttributeValueEnd| {
+                onAttributeValueEnd(char);
+            }
+            self.parserBufferLen = 0;
+            self.delimiter = 0;
+            self.changeState(TokenizerStatus.namedTag);
+            return;
+        } else {
+            if (self.parserBufferLen == buffer_size) {
+                if (self.events.OnAttributeValueContent) |onAttributeValueContent| {
+                    onAttributeValueContent(self.parserBuffer[0..self.parserBufferLen]);
+                }
+                self.parserBufferLen = 0;
+            }
+        }
+    }
     // TODO
-    //fn parseAsAttributeName(self: Self, char: u21) !void {}
     //fn parseAsAttributeValue(self: Self, char: u21) !void {}
     fn parseAsComment(self: *ZaxTokenizer, char: u21) !void {
         self.parserBuffer[self.parserBufferLen] = char;
