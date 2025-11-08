@@ -355,7 +355,7 @@ const TokenizerStatus = enum {
     end,
 };
 
-const XMLTokenizerError = error{ XMLInvalidXML, Utf8InvalidStartByte, Utf8DecodeError };
+const XMLTokenizerError = error{ XMLInvalidToken, Utf8InvalidStartByte, Utf8DecodeError };
 
 pub const TokenizerState = struct {
     status: TokenizerStatus = TokenizerStatus.start,
@@ -420,7 +420,7 @@ pub const TokenizerEventsHandler = struct {
     /// Handle text nodes
     OnText: ?*const fn (text: []const u21) void = undefined,
     /// Handle XML errors found during parsing
-    OnXMLErrors: ?*const fn (state: TokenizerState, xmlError: XMLTokenizerError, message: []const u8) void = undefined,
+    OnXMLErrors: ?*const fn (previous: TokenizerState, current: TokenizerState, xmlError: XMLTokenizerError, message: []const u8) void = undefined,
 };
 
 fn utf8Size(char: u8) u8 {
@@ -441,13 +441,12 @@ fn isUtf8Part(char: u8) bool {
     return (char & 0b1100_0000) == 0b1000_0000;
 }
 
-/// Zax tokenizer to parse xml content with a fixed size buffer
+/// Zax tokenizer to parse xml content with a fixed size buffer of 4096 unicode characters (u21)
 ///
-/// buffer_size : number of characters utf8 to bufferize
-///
-/// events : event handlers for the parser
+/// The tokenizer raises events on "tokens" and associated data, and raises errors on locally malformed xml structures
+/// (this is meant to be used in a SAX or a DOM Parser implementation, that would check for structural issues)
 pub const ZaxTokenizer = struct {
-    const buffer_size = 64 * 4096;
+    const buffer_size = 4096;
     // Empty event handlers with no event handlers
     events: TokenizerEventsHandler,
     options: ParserOptions,
@@ -457,6 +456,7 @@ pub const ZaxTokenizer = struct {
     parserBuffer: [buffer_size]u21 = [_]u21{0} ** buffer_size,
     parserBufferLen: usize = 0,
     contentStartInBuffer: usize = 0,
+    contentEndInBuffer: usize = 0,
     delimiter: u21 = 0, // " or '
     //entityBuffer: [10]u21 = [_]u21{0} ** 10, // entity has max 10 characters
     //entityBufferLen: usize = 0,
@@ -473,8 +473,15 @@ pub const ZaxTokenizer = struct {
         .currentColumn = 0,
     },
 
+    // Adding allocator for dynamic allocations within events if needed
+
+    /// Update the current state of the tokenizer
     fn changeState(self: *ZaxTokenizer, newStatus: TokenizerStatus) void {
-        self.previousState = self.state;
+        self.previousState = .{
+            .currentColumn = self.state.currentColumn,
+            .currentLine = self.state.currentLine,
+            .status = self.state.status,
+        };
         self.state.status = newStatus;
     }
 
@@ -499,7 +506,6 @@ pub const ZaxTokenizer = struct {
                 .currentLine = 0,
                 .currentColumn = 0,
             },
-            //.allocator = allocator,
         };
     }
 
@@ -527,7 +533,7 @@ pub const ZaxTokenizer = struct {
                 if (self.remainingCharCode == -1) {
                     //raise an utf8 decoding error event
                     if (self.events.OnXMLErrors) |onXMLErrors| {
-                        onXMLErrors(self.state, XMLTokenizerError.Utf8InvalidStartByte, "Invalid UTF8 character");
+                        onXMLErrors(self.previousState, self.state, XMLTokenizerError.Utf8InvalidStartByte, "Invalid UTF8 character");
                     }
                 }
             } else {
@@ -538,7 +544,7 @@ pub const ZaxTokenizer = struct {
                 } else {
                     //raise an utf8 decoding error event
                     if (self.events.OnXMLErrors) |onXMLErrors| {
-                        onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid UTF8 character");
+                        onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "Invalid UTF8 character");
                     }
                 }
             }
@@ -571,8 +577,12 @@ pub const ZaxTokenizer = struct {
                     .doctypePublicId => {},
                     .doctypeSystemId => {},
                     .doctypeSubset => {},
-                    .cdata => {},
-                    .comment => {},
+                    .cdata => {
+                        try self.parseAsCDATA(unicodeChar);
+                    },
+                    .comment => {
+                        try self.parseAsComment(unicodeChar);
+                    },
                     .processingInstruction => {
                         try self.parseAsPI(unicodeChar, false);
                     },
@@ -664,12 +674,12 @@ pub const ZaxTokenizer = struct {
                 },
                 else => {
                     if (self.events.OnXMLErrors) |onXMLErrors| {
-                        onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Entity found in invalid context");
+                        onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "Entity found in invalid context");
                     }
                     self.changeState(TokenizerStatus.text);
                     // TODO : raise malformed XML, unauthorized entity in current state
                     if (self.options.strict.?) {
-                        return XMLTokenizerError.XMLInvalidXML;
+                        return XMLTokenizerError.XMLInvalidToken;
                     }
                 },
             }
@@ -708,7 +718,7 @@ pub const ZaxTokenizer = struct {
                     if (!isNameStartChar(char)) {
                         // Invalid character after < (should be /, ?, ! or a name start char)
                         if (self.events.OnXMLErrors) |onXMLErrors| {
-                            onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "invalid character found after a '<'");
+                            onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "invalid character found after a '<'");
                         }
                         // continue parsing as text
                         if (self.events.OnText) |onText| {
@@ -752,7 +762,7 @@ pub const ZaxTokenizer = struct {
         } else if (!isNameChar(char)) {
             // Invalid character after < (should be /, ?, ! or a name start char)
             if (self.events.OnXMLErrors) |onXMLErrors| {
-                onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "invalid character found in tag name");
+                onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "invalid character found in tag name");
             }
             // continue parsing as text
             if (self.events.OnText) |onText| {
@@ -764,6 +774,8 @@ pub const ZaxTokenizer = struct {
         } // else continue parsing as named tag
     }
 
+    /// parsing <? ... ?> processing instruction
+    /// Note that the buffer should contain '<?' at index 0 and 1 when starting this function
     fn parseAsPI(self: *ZaxTokenizer, char: u21, inContent: bool) !void {
         self.parserBuffer[self.parserBufferLen] = char;
         self.parserBufferLen += 1;
@@ -793,26 +805,26 @@ pub const ZaxTokenizer = struct {
             } else {
                 // Invalid PI target name
                 if (self.events.OnXMLErrors) |onXMLErrors| {
-                    onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid processing instruction target name");
+                    onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "Invalid processing instruction target name");
                 }
                 // Fallback to text parsing
                 self.changeState(TokenizerStatus.text);
                 // TODO : raise malformed XML error
                 if (self.options.strict.?) {
-                    return XMLTokenizerError.XMLInvalidXML;
+                    return XMLTokenizerError.XMLInvalidToken;
                 }
             }
         } else if (char == '?') {
             if (self.parserBufferLen == 3) { //<??
                 // Invalid PI target name
                 if (self.events.OnXMLErrors) |onXMLErrors| {
-                    onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid processing instruction target name");
+                    onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "Invalid processing instruction target name");
                 }
                 // Fallback to text parsing
                 self.changeState(TokenizerStatus.text);
                 // TODO : raise malformed XML error
                 if (self.options.strict.?) {
-                    return XMLTokenizerError.XMLInvalidXML;
+                    return XMLTokenizerError.XMLInvalidToken;
                 }
             }
             // Continue parsing possible end of processing instruction
@@ -835,13 +847,13 @@ pub const ZaxTokenizer = struct {
         } else if (!isNameChar(char)) {
             // Invalid PI target name
             if (self.events.OnXMLErrors) |onXMLErrors| {
-                onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid processing instruction target name");
+                onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "Invalid processing instruction target name");
             }
             // Fallback to text parsing
             self.changeState(TokenizerStatus.text);
             // TODO : raise malformed XML error
             if (self.options.strict.?) {
-                return XMLTokenizerError.XMLInvalidXML;
+                return XMLTokenizerError.XMLInvalidToken;
             }
         }
     }
@@ -881,13 +893,13 @@ pub const ZaxTokenizer = struct {
         if (self.parserBufferLen >= 9) { // did not match any valid data tag
             // No valid data tag found
             if (self.events.OnXMLErrors) |onXMLErrors| {
-                onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid data tag found after '<!'");
+                onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "Invalid data tag found after '<!'");
             }
             // Fallback to text parsing
             self.changeState(TokenizerStatus.text);
             // TODO : raise malformed XML error
             if (self.options.strict.?) {
-                return XMLTokenizerError.XMLInvalidXML;
+                return XMLTokenizerError.XMLInvalidToken;
             }
             return;
         }
@@ -899,13 +911,13 @@ pub const ZaxTokenizer = struct {
             else => {
                 // Invalid character and data tag found
                 if (self.events.OnXMLErrors) |onXMLErrors| {
-                    onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid character found in starting data tag");
+                    onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "Invalid character found in starting data tag");
                 }
                 // Fallback to text parsing
                 self.changeState(TokenizerStatus.text);
                 // TODO : raise malformed XML error
                 if (self.options.strict.?) {
-                    return XMLTokenizerError.XMLInvalidXML;
+                    return XMLTokenizerError.XMLInvalidToken;
                 }
             },
         }
@@ -925,13 +937,13 @@ pub const ZaxTokenizer = struct {
             } else {
                 // Invalid character found after closing tag '/' character
                 if (self.events.OnXMLErrors) |onXMLErrors| {
-                    onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid self-closing tag syntax");
+                    onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "Invalid self-closing tag syntax");
                 }
                 // Fallback to non closing tag parsing
                 self.changeState(TokenizerStatus.namedTag);
                 // TODO : raise malformed XML error
                 if (self.options.strict.?) {
-                    return XMLTokenizerError.XMLInvalidXML;
+                    return XMLTokenizerError.XMLInvalidToken;
                 }
             }
         } else if (isNameChar(char)) {
@@ -956,11 +968,38 @@ pub const ZaxTokenizer = struct {
         } else {
             // Invalid character in named tag
             if (self.events.OnXMLErrors) |onXMLErrors| {
-                onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid character found in namedtag");
+                onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "Invalid character found in namedtag");
             }
             // TODO : raise malformed XML error
             if (self.options.strict.?) {
-                return XMLTokenizerError.XMLInvalidXML;
+                return XMLTokenizerError.XMLInvalidToken;
+            }
+        }
+    }
+    fn parseAsClosingTag(self: *ZaxTokenizer, char: u21) !void {
+        self.parserBuffer[self.parserBufferLen] = char;
+        self.parserBufferLen += 1;
+        // Authorised characters are namechar, > and whitespace (last one is ending)
+        if (isWhitespace(char)) {
+            // only allowed after the name and before '>'
+            return;
+        } else if (char == '>') {
+            // End of closing tag
+            if (self.events.OnClosingTag) |onClosingTag| {
+                onClosingTag(self.parserBuffer[0 .. self.parserBufferLen - 1]);
+            }
+            self.parserBufferLen = 0;
+            self.changeState(TokenizerStatus.text);
+            return;
+        } else if (!isNameChar(char)) {
+            if (self.events.OnXMLErrors) |onXMLErrors| {
+                onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "Invalid character found in closing tag");
+            }
+            // Fallback to text parsing
+            self.changeState(TokenizerStatus.text);
+            // TODO : raise malformed XML error
+            if (self.options.strict.?) {
+                return XMLTokenizerError.XMLInvalidToken;
             }
         }
     }
@@ -986,13 +1025,13 @@ pub const ZaxTokenizer = struct {
         } else {
             // Invalid character found before doctype root element name
             if (self.events.OnXMLErrors) |onXMLErrors| {
-                onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid character found before doctype root element name");
+                onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "Invalid character found before doctype root element name");
             }
             // Fallback to text parsing
             self.changeState(TokenizerStatus.text);
             // TODO : raise malformed XML error
             if (self.options.strict.?) {
-                return XMLTokenizerError.XMLInvalidXML;
+                return XMLTokenizerError.XMLInvalidToken;
             }
         }
     }
@@ -1035,13 +1074,13 @@ pub const ZaxTokenizer = struct {
             return;
         } else if (!isNameChar(char)) {
             if (self.events.OnXMLErrors) |onXMLErrors| {
-                onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid character found in doctype type declaration");
+                onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "Invalid character found in doctype type declaration");
             }
             // Fallback to text parsing
             self.changeState(TokenizerStatus.text);
             // TODO : raise malformed XML error
             if (self.options.strict.?) {
-                return XMLTokenizerError.XMLInvalidXML;
+                return XMLTokenizerError.XMLInvalidToken;
             }
         }
     }
@@ -1071,13 +1110,13 @@ pub const ZaxTokenizer = struct {
         if (!authorizedCharacters) {
             // Invalid character found in doctype type declaration
             if (self.events.OnXMLErrors) |onXMLErrors| {
-                onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid character found while parsing doctype type declaration");
+                onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "Invalid character found while parsing doctype type declaration");
             }
             // Fallback to text parsing
             self.changeState(TokenizerStatus.text);
             // TODO : raise malformed XML error
             if (self.options.strict.?) {
-                return XMLTokenizerError.XMLInvalidXML;
+                return XMLTokenizerError.XMLInvalidToken;
             }
             return;
         } else {
@@ -1086,13 +1125,13 @@ pub const ZaxTokenizer = struct {
                     // If whitespace is after a character other than whitespace
                     // Invalid doctype declaration on position while checking for type
                     if (self.events.OnXMLErrors) |onXMLErrors| {
-                        onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid character found in doctype type declaration");
+                        onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "Invalid character found in doctype type declaration");
                     }
                     // Fallback to text parsing
                     self.changeState(TokenizerStatus.text);
                     // TODO : raise malformed XML error
                     if (self.options.strict.?) {
-                        return XMLTokenizerError.XMLInvalidXML;
+                        return XMLTokenizerError.XMLInvalidToken;
                     }
                     return;
                 } else return; // continue parsing
@@ -1101,13 +1140,13 @@ pub const ZaxTokenizer = struct {
                     // If [ is after a character other than whitespace
                     // Invalid doctype declaration on position while checking for type
                     if (self.events.OnXMLErrors) |onXMLErrors| {
-                        onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid character found in doctype type declaration");
+                        onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "Invalid character found in doctype type declaration");
                     }
                     // Fallback to text parsing
                     self.changeState(TokenizerStatus.text);
                     // TODO : raise malformed XML error
                     if (self.options.strict.?) {
-                        return XMLTokenizerError.XMLInvalidXML;
+                        return XMLTokenizerError.XMLInvalidToken;
                     }
                     return;
                 }
@@ -1149,13 +1188,13 @@ pub const ZaxTokenizer = struct {
             if (!isAuthorizedChar) {
                 // Invalid character found while parsing public id
                 if (self.events.OnXMLErrors) |onXMLErrors| {
-                    onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid character found while parsing public id");
+                    onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "Invalid character found while parsing public id");
                 }
                 // Fallback to text parsing
                 self.changeState(TokenizerStatus.text);
                 // TODO : raise malformed XML error
                 if (self.options.strict.?) {
-                    return XMLTokenizerError.XMLInvalidXML;
+                    return XMLTokenizerError.XMLInvalidToken;
                 }
             } else if (char == '"' or char == '\'') {
                 self.delimiter = char;
@@ -1169,13 +1208,13 @@ pub const ZaxTokenizer = struct {
             } else {
                 // Invalid character found while parsing public id delimiter
                 if (self.events.OnXMLErrors) |onXMLErrors| {
-                    onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid character found while parsing public id delimiter");
+                    onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "Invalid character found while parsing public id delimiter");
                 }
                 // Fallback to text parsing
                 self.changeState(TokenizerStatus.text);
                 // TODO : raise malformed XML error
                 if (self.options.strict.?) {
-                    return XMLTokenizerError.XMLInvalidXML;
+                    return XMLTokenizerError.XMLInvalidToken;
                 }
             }
         } else if (char == self.delimiter) {
@@ -1193,13 +1232,13 @@ pub const ZaxTokenizer = struct {
         } else if (!isPubIdChar(char)) {
             // Invalid character found while parsing public id delimiter
             if (self.events.OnXMLErrors) |onXMLErrors| {
-                onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid character found while parsing public id ");
+                onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "Invalid character found while parsing public id ");
             }
             // Fallback to text parsing
             self.changeState(TokenizerStatus.text);
             // TODO : raise malformed XML error
             if (self.options.strict.?) {
-                return XMLTokenizerError.XMLInvalidXML;
+                return XMLTokenizerError.XMLInvalidToken;
             }
             return;
         } // else continue parsing public id
@@ -1221,13 +1260,13 @@ pub const ZaxTokenizer = struct {
             } else {
                 // Invalid character found while parsing system id
                 if (self.events.OnXMLErrors) |onXMLErrors| {
-                    onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid character found while parsing system id");
+                    onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "Invalid character found while parsing system id");
                 }
                 // Fallback to text parsing
                 self.changeState(TokenizerStatus.text);
                 // TODO : raise malformed XML error
                 if (self.options.strict.?) {
-                    return XMLTokenizerError.XMLInvalidXML;
+                    return XMLTokenizerError.XMLInvalidToken;
                 }
             }
         } else if (char == self.delimiter) {
@@ -1283,13 +1322,13 @@ pub const ZaxTokenizer = struct {
         } else {
             // Invalid character found in attribute name
             if (self.events.OnXMLErrors) |onXMLErrors| {
-                onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid character found in attribute name");
+                onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "Invalid character found in attribute name");
             }
             // Fallback to text parsing
             self.changeState(TokenizerStatus.tag);
             // TODO : raise malformed XML error
             if (self.options.strict.?) {
-                return XMLTokenizerError.XMLInvalidXML;
+                return XMLTokenizerError.XMLInvalidToken;
             }
         }
     }
@@ -1308,13 +1347,13 @@ pub const ZaxTokenizer = struct {
             } else {
                 // Invalid character found while parsing attribute value
                 if (self.events.OnXMLErrors) |onXMLErrors| {
-                    onXMLErrors(self.state, XMLTokenizerError.XMLInvalidXML, "Invalid character found while parsing attribute value");
+                    onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "Invalid character found while parsing attribute value");
                 }
                 // Fallback to text parsing
                 self.changeState(TokenizerStatus.namedTag);
                 // TODO : raise malformed XML error
                 if (self.options.strict.?) {
-                    return XMLTokenizerError.XMLInvalidXML;
+                    return XMLTokenizerError.XMLInvalidToken;
                 }
             }
         } else if (char == self.delimiter) {
