@@ -571,12 +571,24 @@ pub const ZaxTokenizer = struct {
                     .dataTag => {
                         try self.parseAsDataTag(unicodeChar);
                     },
-                    .doctype => {},
-                    .doctypeRoot => {},
-                    .doctypeType => {},
-                    .doctypePublicId => {},
-                    .doctypeSystemId => {},
-                    .doctypeSubset => {},
+                    .doctype => {
+                        try self.parseAsDoctype(unicodeChar);
+                    },
+                    .doctypeRoot => {
+                        try self.parseAsDoctypeRoot(unicodeChar);
+                    },
+                    .doctypeType => {
+                        try self.parseAsDoctypeType(unicodeChar);
+                    },
+                    .doctypePublicId => {
+                        try self.parseAsPublicID(unicodeChar);
+                    },
+                    .doctypeSystemId => {
+                        try self.parseAsSystemID(unicodeChar);
+                    },
+                    .doctypeSubset => {
+                        try self.parseAsDoctypeSubset(unicodeChar);
+                    },
                     .cdata => {
                         try self.parseAsCDATA(unicodeChar);
                     },
@@ -592,12 +604,18 @@ pub const ZaxTokenizer = struct {
                     .selfClosingNamedTag => {
                         try self.parseAsNamedTag(unicodeChar, true);
                     },
-                    .endTag => {},
+                    .endTag => {
+                        try self.parseAsEndTag(unicodeChar);
+                    },
                     .namedTag => {
                         try self.parseAsNamedTag(unicodeChar, false);
                     },
-                    .attribute => {},
-                    .attributeValue => {},
+                    .attribute => {
+                        try self.parseAsAttributeName(unicodeChar);
+                    },
+                    .attributeValue => {
+                        try self.parseAsAttributeValue(unicodeChar);
+                    },
                     .end => {},
                 }
                 self.parsedChar = [_]u8{0} ** 4;
@@ -654,11 +672,11 @@ pub const ZaxTokenizer = struct {
 
     /// Parse as entity after '&' found in text or attribute value status (parser should be containing '&' at index 0)
     fn parseAsEntity(self: *ZaxTokenizer, char: u21) !void {
-        if (char == ';' or self.parserBufferLen >= 10) {
-            // (sinon a la place de la taille, vérifier si un caractère non authorisé est rencontré)
-            //if (self.options.preserve_entities) {}
-            self.parserBuffer[self.parserBufferLen] = char;
-            self.parserBufferLen += 1;
+        self.parserBuffer[self.parserBufferLen] = char;
+        self.parserBufferLen += 1;
+        if (char == ';' or self.parserBufferLen >= 10) { // End of entity
+            // Note : for now the entity is not decoded, just raised as text or attribute value content
+            // But i'll add an option later to decode entities if requested
             switch (self.previousState.status) {
                 .text => {
                     if (self.events.OnText) |onText| {
@@ -687,9 +705,6 @@ pub const ZaxTokenizer = struct {
             self.parserBufferLen = 0;
             self.changeState(self.previousState.status);
             self.previousState.status = TokenizerStatus.entity;
-        } else {
-            self.parserBuffer[self.parserBufferLen] = char;
-            self.parserBufferLen += 1;
         }
     }
 
@@ -976,12 +991,28 @@ pub const ZaxTokenizer = struct {
             }
         }
     }
-    fn parseAsClosingTag(self: *ZaxTokenizer, char: u21) !void {
+
+    /// Parsing </NameChar S? > closing tag
+    fn parseAsEndTag(self: *ZaxTokenizer, char: u21) !void {
         self.parserBuffer[self.parserBufferLen] = char;
         self.parserBufferLen += 1;
-        // Authorised characters are namechar, > and whitespace (last one is ending)
-        if (isWhitespace(char)) {
-            // only allowed after the name and before '>'
+        if (isNameChar(char)) {
+            const previousChar = self.parserBuffer[self.parserBufferLen - 1];
+            if (!(previousChar == '/' or isNameChar(previousChar))) {
+                // current namechar is not after a namechar or right after the slash, malformed xml here
+                if (self.events.OnXMLErrors) |onXMLErrors| {
+                    onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "Invalid character found in closing tag");
+                }
+                // Fallback to text parsing
+                self.changeState(TokenizerStatus.text);
+                // TODO : raise malformed XML error
+                if (self.options.strict.?) {
+                    return XMLTokenizerError.XMLInvalidToken;
+                }
+            }
+        } else if (isWhitespace(char) and self.parserBufferLen > 2) { //at least </X in parser
+            self.contentEndInBuffer = self.parserBufferLen;
+            // If the whitespace follows a namechar or a space, continue parsing
             return;
         } else if (char == '>') {
             // End of closing tag
@@ -991,7 +1022,7 @@ pub const ZaxTokenizer = struct {
             self.parserBufferLen = 0;
             self.changeState(TokenizerStatus.text);
             return;
-        } else if (!isNameChar(char)) {
+        } else {
             if (self.events.OnXMLErrors) |onXMLErrors| {
                 onXMLErrors(self.previousState, self.state, XMLTokenizerError.XMLInvalidToken, "Invalid character found in closing tag");
             }
@@ -1304,6 +1335,7 @@ pub const ZaxTokenizer = struct {
             return;
         }
     }
+
     fn parseAsAttributeName(self: *ZaxTokenizer, char: u21) !void {
         self.parserBuffer[self.parserBufferLen] = char;
         self.parserBufferLen += 1;
@@ -1369,16 +1401,25 @@ pub const ZaxTokenizer = struct {
             self.changeState(TokenizerStatus.namedTag);
             return;
         } else {
-            if (self.parserBufferLen == buffer_size) {
+            if (char == '&') { // entity check in attribute value
+                if (self.parserBufferLen > 0) { // clear buffer before switching state
+                    if (self.events.OnAttributeValueContent) |onAttributeValueContent| {
+                        onAttributeValueContent(self.parserBuffer[0 .. self.parserBufferLen - 1]);
+                    }
+                }
+                self.parserBuffer[0] = char;
+                self.parserBufferLen = 1;
+                self.previousState = self.state;
+                self.changeState(TokenizerStatus.entity);
+            } else if (self.parserBufferLen == buffer_size) {
                 if (self.events.OnAttributeValueContent) |onAttributeValueContent| {
                     onAttributeValueContent(self.parserBuffer[0..self.parserBufferLen]);
                 }
                 self.parserBufferLen = 0;
-            }
+            } // else continue parsing
         }
     }
-    // TODO
-    //fn parseAsAttributeValue(self: Self, char: u21) !void {}
+
     fn parseAsComment(self: *ZaxTokenizer, char: u21) !void {
         self.parserBuffer[self.parserBufferLen] = char;
         self.parserBufferLen += 1;
