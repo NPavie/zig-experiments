@@ -418,22 +418,22 @@ const NamespaceNode = struct {
 
     pub fn init() NamespaceNode {
         return .{ .node = NodeInterface{
-            .attributes = attributes,
-            .base_uri = base_uri,
-            .children = children,
-            .document_uri = document_uri,
-            .is_id = is_id,
-            .is_idrefs = is_idrefs,
-            .namespace_nodes = namespace_nodes,
-            .nilled = nilled,
-            .node_kind = node_kind,
-            .node_name = node_name,
-            .parent = parent,
-            .string_value = string_value,
-            .type_name = type_name,
-            .typed_value = typed_value,
-            .unparsed_entity_public_id = unparsed_entity_public_id,
-            .unparsed_entity_system_id = unparsed_entity_system_id,
+            .attributes_fn = attributes,
+            .base_uri_fn = base_uri,
+            .children_fn = children,
+            .document_uri_fn = document_uri,
+            .is_id_fn = is_id,
+            .is_idrefs_fn = is_idrefs,
+            .namespace_nodes_fn = namespace_nodes,
+            .nilled_fn = nilled,
+            .node_kind_fn = node_kind,
+            .node_name_fn = node_name,
+            .parent_fn = parent,
+            .string_value_fn = string_value,
+            .type_name_fn = type_name,
+            .typed_value_fn = typed_value,
+            .unparsed_entity_public_id_fn = unparsed_entity_public_id,
+            .unparsed_entity_system_id_fn = unparsed_entity_system_id,
         } };
     }
 
@@ -515,22 +515,22 @@ const ProcessingInstructionNode = struct {
 
     pub fn init() ProcessingInstructionNode {
         return .{ .node = NodeInterface{
-            .attributes = attributes,
-            .base_uri = base_uri,
-            .children = children,
-            .document_uri = document_uri,
-            .is_id = is_id,
-            .is_idrefs = is_idrefs,
-            .namespace_nodes = namespace_nodes,
-            .nilled = nilled,
-            .node_kind = node_kind,
-            .node_name = node_name,
-            .parent = parent,
-            .string_value = string_value,
-            .type_name = type_name,
-            .typed_value = typed_value,
-            .unparsed_entity_public_id = unparsed_entity_public_id,
-            .unparsed_entity_system_id = unparsed_entity_system_id,
+            .attributes_fn = attributes,
+            .base_uri_fn = base_uri,
+            .children_fn = children,
+            .document_uri_fn = document_uri,
+            .is_id_fn = is_id,
+            .is_idrefs_fn = is_idrefs,
+            .namespace_nodes_fn = namespace_nodes,
+            .nilled_fn = nilled,
+            .node_kind_fn = node_kind,
+            .node_name_fn = node_name,
+            .parent_fn = parent,
+            .string_value_fn = string_value,
+            .type_name_fn = type_name,
+            .typed_value_fn = typed_value,
+            .unparsed_entity_public_id_fn = unparsed_entity_public_id,
+            .unparsed_entity_system_id_fn = unparsed_entity_system_id,
         } };
     }
 
@@ -610,22 +610,22 @@ const TextNode = struct {
 
     pub fn init() TextNode {
         return .{ .node = NodeInterface{
-            .attributes = attributes,
-            .base_uri = base_uri,
-            .children = children,
-            .document_uri = document_uri,
-            .is_id = is_id,
-            .is_idrefs = is_idrefs,
-            .namespace_nodes = namespace_nodes,
-            .nilled = nilled,
-            .node_kind = node_kind,
-            .node_name = node_name,
-            .parent = parent,
-            .string_value = string_value,
-            .type_name = type_name,
-            .typed_value = typed_value,
-            .unparsed_entity_public_id = unparsed_entity_public_id,
-            .unparsed_entity_system_id = unparsed_entity_system_id,
+            .attributes_fn = attributes,
+            .base_uri_fn = base_uri,
+            .children_fn = children,
+            .document_uri_fn = document_uri,
+            .is_id_fn = is_id,
+            .is_idrefs_fn = is_idrefs,
+            .namespace_nodes_fn = namespace_nodes,
+            .nilled_fn = nilled,
+            .node_kind_fn = node_kind,
+            .node_name_fn = node_name,
+            .parent_fn = parent,
+            .string_value_fn = string_value,
+            .type_name_fn = type_name,
+            .typed_value_fn = typed_value,
+            .unparsed_entity_public_id_fn = unparsed_entity_public_id,
+            .unparsed_entity_system_id_fn = unparsed_entity_system_id,
         } };
     }
 
@@ -705,22 +705,22 @@ const CommentNode = struct {
 
     pub fn init() CommentNode {
         return .{ .node = NodeInterface{
-            .attributes = attributes,
-            .base_uri = base_uri,
-            .children = children,
-            .document_uri = document_uri,
-            .is_id = is_id,
-            .is_idrefs = is_idrefs,
-            .namespace_nodes = namespace_nodes,
-            .nilled = nilled,
-            .node_kind = node_kind,
-            .node_name = node_name,
-            .parent = parent,
-            .string_value = string_value,
-            .type_name = type_name,
-            .typed_value = typed_value,
-            .unparsed_entity_public_id = unparsed_entity_public_id,
-            .unparsed_entity_system_id = unparsed_entity_system_id,
+            .attributes_fn = attributes,
+            .base_uri_fn = base_uri,
+            .children_fn = children,
+            .document_uri_fn = document_uri,
+            .is_id_fn = is_id,
+            .is_idrefs_fn = is_idrefs,
+            .namespace_nodes_fn = namespace_nodes,
+            .nilled_fn = nilled,
+            .node_kind_fn = node_kind,
+            .node_name_fn = node_name,
+            .parent_fn = parent,
+            .string_value_fn = string_value,
+            .type_name_fn = type_name,
+            .typed_value_fn = typed_value,
+            .unparsed_entity_public_id_fn = unparsed_entity_public_id,
+            .unparsed_entity_system_id_fn = unparsed_entity_system_id,
         } };
     }
 
@@ -793,22 +793,29 @@ const CommentNode = struct {
 };
 
 pub const NodeInterface = struct {
-    attributes_fn: fn (self: *NodeInterface) []*AttributeNode,
-    node_kind_fn: fn (self: *NodeInterface) []const u8,
-    node_name_fn: fn (self: *NodeInterface) ?QName,
-    parent_fn: fn (self: *NodeInterface) ?*NodeInterface,
-    string_value_fn: fn (self: *NodeInterface) []u8,
-    type_name_fn: fn (self: *NodeInterface) ?QName,
-    typed_value_fn: fn (self: *NodeInterface) []anyAtomicType,
-    unparsed_entity_public_id_fn: fn (self: *NodeInterface, entityname: []u8) []u8,
-    unparsed_entity_system_id_fn: fn (self: *NodeInterface, entityname: []u8) []u8,
+    attributes_fn: *const fn (self: *NodeInterface) []*AttributeNode,
+    base_uri_fn: *const fn (self: *NodeInterface) ?[]u8,
+    children_fn: *const fn (self: *NodeInterface) []*NodeInterface,
+    document_uri_fn: *const fn (self: *NodeInterface) ?[]u8,
+    is_id_fn: *const fn (self: *NodeInterface) bool,
+    is_idrefs_fn: *const fn (self: *NodeInterface) bool,
+    namespace_nodes_fn: *const fn (self: *NodeInterface) []*NodeInterface,
+    nilled_fn: *const fn (self: *NodeInterface) bool,
+    node_kind_fn: *const fn (self: *NodeInterface) []const u8,
+    node_name_fn: *const fn (self: *NodeInterface) ?QName,
+    parent_fn: *const fn (self: *NodeInterface) ?*NodeInterface,
+    string_value_fn: *const fn (self: *NodeInterface) []u8,
+    type_name_fn: *const fn (self: *NodeInterface) ?QName,
+    typed_value_fn: *const fn (self: *NodeInterface) []anyAtomicType,
+    unparsed_entity_public_id_fn: *const fn (self: *NodeInterface, entityname: []u8) []u8,
+    unparsed_entity_system_id_fn: *const fn (self: *NodeInterface, entityname: []u8) []u8,
 
     /// dm:attributes($n as node()) as attribute()*
     ///
     /// The dm:attributes accessor returns the attributes of a node as a sequence containing zero or more Attribute Nodes. The order of Attribute Nodes is stable but implementation dependent.
     /// It is defined on all seven node kinds.
     pub fn attributes(self: *NodeInterface) []*AttributeNode {
-        return self.attributes(self);
+        return self.attributes_fn(self);
     }
 
     /// dm:base-uri($n as node()) as xs:anyURI?
@@ -816,7 +823,7 @@ pub const NodeInterface = struct {
     ///The dm:base-uri accessor returns the base URI of a node as a sequence containing zero or one URI reference. For more information about base URIs, see https://www.w3.org/TR/xmlbase/.
     ///It is defined on all seven node kinds
     pub fn base_uri(self: *NodeInterface) ?[]u8 {
-        return self.base_uri(self);
+        return self.base_uri_fn(self);
     }
 
     /// TODO : dm:children($n as node()) as node()*
@@ -824,7 +831,7 @@ pub const NodeInterface = struct {
     /// The dm:children accessor returns the children of a node as a sequence containing zero or more nodes.
     /// It is defined on all seven node kinds.
     pub fn children(self: *NodeInterface) []*NodeInterface {
-        return self.children(self);
+        return self.children_fn(self);
     }
 
     /// TODO : dm:document-uri($node as node()) as xs:anyURI?
@@ -832,7 +839,7 @@ pub const NodeInterface = struct {
     /// The dm:document-uri accessor returns the absolute URI of the resource from which the Document Node was constructed, if the absolute URI is available. If there is no URI available, or if it cannot be made absolute when the Document Node is constructed, or if it is used on a node other than a Document Node, the empty sequence is returned.
     /// It is defined on all seven node kinds.
     pub fn document_uri(self: *NodeInterface) ?[]u8 {
-        return self.document_uri(self);
+        return self.document_uri_fn(self);
     }
 
     /// TODO : dm:is-id($node as node()) as xs:boolean?
@@ -840,7 +847,7 @@ pub const NodeInterface = struct {
     /// The dm:is-id accessor returns true if the node is an XML ID. Exactly what constitutes an ID depends in part on how the data model was constructed, see 6.2 Element Nodes and 6.3 Attribute Nodes.
     /// It is defined on all seven node kinds.
     pub fn is_id(self: *NodeInterface) bool {
-        return self.is_id(self);
+        return self.is_id_fn(self);
     }
 
     /// TODO : dm:is-idrefs($node as node()) as xs:boolean?
@@ -848,7 +855,7 @@ pub const NodeInterface = struct {
     /// The dm:is-idrefs accessor returns true if the node is an XML IDREF or IDREFS. Exactly what constitutes an IDREF or IDREFS depends in part on how the data model was constructed, see 6.2 Element Nodes and 6.3 Attribute Nodes.
     // It is defined on all seven node kinds.
     pub fn is_idrefs(self: *NodeInterface) bool {
-        return self.is_idrefs(self);
+        return self.is_idrefs_fn(self);
     }
 
     /// TODO : dm:namespace-nodes($n as node()) as node()*
@@ -856,7 +863,7 @@ pub const NodeInterface = struct {
     /// The dm:namespace-nodes accessor returns the dynamic, in-scope namespaces associated with a node as a sequence containing zero or more Namespace Nodes. The order of Namespace Nodes is stable but implementation dependent.
     /// It is defined on all seven node kinds.
     pub fn namespace_nodes(self: *NodeInterface) []*NodeInterface {
-        return self.namespace_nodes(self);
+        return self.namespace_nodes_fn(self);
     }
 
     /// TODO : dm:nilled($n as node()) as xs:boolean?
@@ -864,7 +871,7 @@ pub const NodeInterface = struct {
     /// The dm:nilled accessor returns true if the node is "nilled". [Schema Part 1] introduced the nilled mechanism to signal that an element should be accepted as valid when it has no content even when it has a content type which does not require or even necessarily allow empty content.
     /// It is defined on all seven node kinds.
     pub fn nilled(self: *NodeInterface) bool {
-        return self.nilled(self);
+        return self.nilled_fn(self);
     }
 
     /// dm:node-kind($n as node()) as xs:string
@@ -872,7 +879,7 @@ pub const NodeInterface = struct {
     /// The dm:node-kind accessor returns a string identifying the kind of node. It will be one of the following, depending on the kind of node: “attribute”, “comment”, “document”, “element”, “namespace” “processing-instruction”, or “text”.
     /// It is defined on all seven node kinds.
     pub fn node_kind(self: *NodeInterface) []const u8 {
-        return self.node_kind(self);
+        return self.node_kind_fn(self);
     }
 
     /// dm:node-name($n as node()) as xs:QName?
@@ -880,7 +887,7 @@ pub const NodeInterface = struct {
     /// The dm:node-name accessor returns the name of the node as a sequence of zero or one xs:QNames. Note that the QName value includes an optional prefix as described in 3.3.3 QNames and NOTATIONS.
     /// It is defined on all seven node kinds.
     pub fn node_name(self: *NodeInterface) ?QName {
-        return self.node_name(self);
+        return self.node_name_fn(self);
     }
 
     /// TODO : dm:parent($n as node()) as node()?
@@ -888,7 +895,7 @@ pub const NodeInterface = struct {
     /// The dm:parent accessor returns the parent of a node as a sequence containing zero or one nodes.
     /// It is defined on all seven node kinds.
     pub fn parent(self: *NodeInterface) ?*NodeInterface {
-        return self.parent(self);
+        return self.parent_fn(self);
     }
 
     /// TODO : dm:string-value($n as node()) as xs:string
@@ -896,7 +903,7 @@ pub const NodeInterface = struct {
     /// The dm:string-value accessor returns the string value of a node.
     /// It is defined on all seven node kinds.
     pub fn string_value(self: *NodeInterface) []u8 {
-        return self.string_value(self);
+        return self.string_value_fn(self);
     }
 
     /// TODO : dm:type-name($n as node()) as xs:QName?
@@ -904,7 +911,7 @@ pub const NodeInterface = struct {
     /// The dm:type-name accessor returns the name of the schema type of a node as a sequence of zero or one xs:QNames.
     /// It is defined on all seven node kinds.
     pub fn type_name(self: *NodeInterface) ?QName {
-        return self.type_name(self);
+        return self.type_name_fn(self);
     }
 
     /// TODO : dm:typed-value($n as node()) as xs:anyAtomicType*
@@ -912,7 +919,7 @@ pub const NodeInterface = struct {
     /// The dm:typed-value accessor returns the typed-value of the node as a sequence of zero or more atomic values.
     /// It is defined on all seven node kinds.
     pub fn typed_value(self: *NodeInterface) []anyAtomicType {
-        return self.typed_value(self);
+        return self.typed_value_fn(self);
     }
 
     /// TODO : dm:unparsed-entity-public-id($node as node(), $entityname as xs:string) as xs:string?
@@ -921,13 +928,13 @@ pub const NodeInterface = struct {
     /// If no entity with the name specified in $entityname exists, or if the entity is not an external unparsed entity, or if the entity has no public identifier, the empty sequence is returned.
     /// It is defined on all seven node kinds.
     pub fn unparsed_entity_public_id(self: *NodeInterface, entityname: []u8) []u8 {
-        return self.unparsed_entity_public_id(self, entityname);
+        return self.unparsed_entity_public_id_fn(self, entityname);
     }
 
     /// TODO : dm:unparsed-entity-system-id($node as node(), $entityname as xs:string) as xs:anyURI?
     /// The dm:unparsed-entity-system-id accessor returns the system identifier of an unparsed external entity declared in the specified document. The value is an absolute URI, and is obtained by resolving the [system identifier] of the unparsed entity information item against the [declaration base URI] of the same item. If no entity with the name specified in $entityname exists, or if the entity is not an external unparsed entity, the empty sequence is returned.
     /// It is defined on all seven node kinds.
     pub fn unparsed_entity_system_id(self: *NodeInterface, entityname: []u8) []u8 {
-        return self.unparsed_entity_system_id(self, entityname);
+        return self.unparsed_entity_system_id_fn(self, entityname);
     }
 };
