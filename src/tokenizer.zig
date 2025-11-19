@@ -262,7 +262,7 @@ const ENTITIES = std.StaticStringMap(u32).initComptime(.{
 });
 
 /// Zax options
-pub const ParserOptions = struct {
+pub const TokenizerOptions = struct {
     /// Strict mode : abort on invalid xml detection
     strict: ?bool = false,
     /// Preserve entities : do not decode entities in the text when raising text events
@@ -471,7 +471,7 @@ pub const ZaxTokenizer = struct {
     const buffer_size = 4096;
     // Empty event handlers with no event handlers
     events: TokenizerEventsInterface,
-    options: ParserOptions,
+    options: TokenizerOptions,
     parsedChar: [4]u8 = [_]u8{0} ** 4,
     parsedCharLen: usize = 0,
     remainingCharCode: i8 = 0,
@@ -507,7 +507,7 @@ pub const ZaxTokenizer = struct {
         self.state.status = newStatus;
     }
 
-    pub fn init(events: TokenizerEventsInterface, options: ParserOptions) ZaxTokenizer {
+    pub fn init(events: TokenizerEventsInterface, options: TokenizerOptions) ZaxTokenizer {
         return ZaxTokenizer{
             .events = events,
             .options = options,

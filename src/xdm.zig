@@ -1,4 +1,7 @@
 // implementation of XDM 3.1 in zig
+// With some additions :
+// - TextNode have a "CDATA" flag to distinguish between normal text nodes and CDATA sections
+//
 // reference : https://www.w3.org/TR/xpath-datamodel-31/
 const std = @import("std");
 
@@ -196,7 +199,7 @@ pub const DocumentNode = struct {
     }
 };
 
-const ElementNode = struct {
+pub const ElementNode = struct {
     _base_uri: ?[]u8,
     _node_name: QName,
     _parent: ?union(enum) {
@@ -309,7 +312,7 @@ const ElementNode = struct {
     }
 };
 
-const AttributeNode = struct {
+pub const AttributeNode = struct {
     _node_name: QName,
     _parent: ?*ElementNode,
     schema_type: []u8,
@@ -409,7 +412,7 @@ const AttributeNode = struct {
     }
 };
 
-const NamespaceNode = struct {
+pub const NamespaceNode = struct {
     prefix: ?[]u8,
     uri: []u8,
     _parent: ?NodeInterface,
@@ -505,7 +508,7 @@ const NamespaceNode = struct {
     }
 };
 
-const ProcessingInstructionNode = struct {
+pub const ProcessingInstructionNode = struct {
     target: []u8,
     content: []u8,
     _base_uri: ?[]u8,
@@ -602,10 +605,10 @@ const ProcessingInstructionNode = struct {
     }
 };
 
-const TextNode = struct {
+pub const TextNode = struct {
     content: []u8,
     _parent: ?*NodeInterface,
-
+    is_cdata: bool,
     node: NodeInterface,
 
     pub fn init() TextNode {
@@ -697,7 +700,7 @@ const TextNode = struct {
     }
 };
 
-const CommentNode = struct {
+pub const CommentNode = struct {
     content: []u8,
     _parent: ?*NodeInterface,
 
