@@ -108,93 +108,71 @@ pub const DocumentNode = struct {
     _string_value: []u8,
     _typed_value: []u8,
 
-    node: NodeInterface,
 
-    pub fn init() DocumentNode {
-        return .{ .node = NodeInterface{
-            .attributes = attributes,
-            .base_uri = base_uri,
-            .children = children,
-            .document_uri = document_uri,
-            .is_id = is_id,
-            .is_idrefs = is_idrefs,
-            .namespace_nodes = namespace_nodes,
-            .nilled = nilled,
-            .node_kind = node_kind,
-            .node_name = node_name,
-            .parent = parent,
-            .string_value = string_value,
-            .type_name = type_name,
-            .typed_value = typed_value,
-            .unparsed_entity_public_id = unparsed_entity_public_id,
-            .unparsed_entity_system_id = unparsed_entity_system_id,
-        } };
-    }
+    fn attributes(self: *DocumentNode) []*AttributeNode {
 
-    fn attributes(self: *NodeInterface) []*AttributeNode {
-        const _self: *DocumentNode = @fieldParentPtr("node", self);
-        _ = _self;
+        _ = self;
     }
-    fn base_uri(self: *NodeInterface) ?[]u8 {
-        const _self: *DocumentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn base_uri(self: *DocumentNode) ?[]u8 {
+
+        _ = self;
     }
-    fn children(self: *NodeInterface) []*NodeInterface {
-        const _self: *DocumentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn children(self: *DocumentNode) []*Node {
+
+        _ = self;
     }
-    fn document_uri(self: *NodeInterface) ?[]u8 {
-        const _self: *DocumentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn document_uri(self: *DocumentNode) ?[]u8 {
+
+        _ = self;
     }
-    fn is_id(self: *NodeInterface) bool {
-        const _self: *DocumentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn is_id(self: *DocumentNode) bool {
+
+        _ = self;
     }
-    fn is_idrefs(self: *NodeInterface) bool {
-        const _self: *DocumentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn is_idrefs(self: *DocumentNode) bool {
+
+        _ = self;
     }
-    fn namespace_nodes(self: *NodeInterface) []*NodeInterface {
-        const _self: *DocumentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn namespace_nodes(self: *DocumentNode) []*Node {
+
+        _ = self;
     }
-    fn nilled(self: *NodeInterface) bool {
-        const _self: *DocumentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn nilled(self: *DocumentNode) bool {
+
+        _ = self;
     }
-    fn node_kind(self: *NodeInterface) []const u8 {
+    fn node_kind(self: *DocumentNode) []const u8 {
         _ = self;
         return NodeType.document.str();
     }
-    fn node_name(self: *NodeInterface) ?QName {
-        const _self: *DocumentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn node_name(self: *DocumentNode) ?QName {
+
+        _ = self;
     }
-    fn parent(self: *NodeInterface) ?*NodeInterface {
-        const _self: *DocumentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn parent(self: *DocumentNode) ?*Node {
+
+        _ = self;
     }
-    fn string_value(self: *NodeInterface) []u8 {
-        const _self: *DocumentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn string_value(self: *DocumentNode) []u8 {
+
+        _ = self;
     }
-    fn type_name(self: *NodeInterface) ?QName {
-        const _self: *DocumentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn type_name(self: *DocumentNode) ?QName {
+
+        _ = self;
     }
-    fn typed_value(self: *NodeInterface) []anyAtomicType {
-        const _self: *DocumentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn typed_value(self: *DocumentNode) []anyAtomicType {
+
+        _ = self;
     }
-    fn unparsed_entity_public_id(self: *NodeInterface, entityname: []u8) []u8 {
-        const _self: *DocumentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn unparsed_entity_public_id(self: *DocumentNode, entityname: []u8) []u8 {
+
+        _ = self;
         _ = entityname;
     }
-    fn unparsed_entity_system_id(self: *NodeInterface, entityname: []u8) []u8 {
-        const _self: *DocumentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn unparsed_entity_system_id(self: *DocumentNode, entityname: []u8) []u8 {
+
+        _ = self;
         _ = entityname;
     }
 };
@@ -221,93 +199,70 @@ pub const ElementNode = struct {
     _is_id: bool,
     _is_idrefs: bool,
 
-    node: NodeInterface,
+    fn attributes(self: *ElementNode) []*AttributeNode {
 
-    pub fn init() ElementNode {
-        return .{ .node = NodeInterface{
-            .attributes = attributes,
-            .base_uri = base_uri,
-            .children = children,
-            .document_uri = document_uri,
-            .is_id = is_id,
-            .is_idrefs = is_idrefs,
-            .namespace_nodes = namespace_nodes,
-            .nilled = nilled,
-            .node_kind = node_kind,
-            .node_name = node_name,
-            .parent = parent,
-            .string_value = string_value,
-            .type_name = type_name,
-            .typed_value = typed_value,
-            .unparsed_entity_public_id = unparsed_entity_public_id,
-            .unparsed_entity_system_id = unparsed_entity_system_id,
-        } };
+        _ = self;
     }
+    fn base_uri(self: *ElementNode) ?[]u8 {
 
-    fn attributes(self: *NodeInterface) []*AttributeNode {
-        const _self: *ElementNode = @fieldParentPtr("node", self);
-        _ = _self;
+        _ = self;
     }
-    fn base_uri(self: *NodeInterface) ?[]u8 {
-        const _self: *ElementNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn children(self: *ElementNode) []*Node {
+
+        _ = self;
     }
-    fn children(self: *NodeInterface) []*NodeInterface {
-        const _self: *ElementNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn document_uri(self: *ElementNode) ?[]u8 {
+
+        _ = self;
     }
-    fn document_uri(self: *NodeInterface) ?[]u8 {
-        const _self: *ElementNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn is_id(self: *ElementNode) bool {
+
+        _ = self;
     }
-    fn is_id(self: *NodeInterface) bool {
-        const _self: *ElementNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn is_idrefs(self: *ElementNode) bool {
+
+        _ = self;
     }
-    fn is_idrefs(self: *NodeInterface) bool {
-        const _self: *ElementNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn namespace_nodes(self: *ElementNode) []*Node {
+
+        _ = self;
     }
-    fn namespace_nodes(self: *NodeInterface) []*NodeInterface {
-        const _self: *ElementNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn nilled(self: *ElementNode) bool {
+
+        _ = self;
     }
-    fn nilled(self: *NodeInterface) bool {
-        const _self: *ElementNode = @fieldParentPtr("node", self);
-        _ = _self;
-    }
-    fn node_kind(self: *NodeInterface) []const u8 {
+    fn node_kind(self: *ElementNode) []const u8 {
         _ = self;
         return NodeType.element.str();
     }
-    fn node_name(self: *NodeInterface) ?QName {
-        const _self: *ElementNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn node_name(self: *ElementNode) ?QName {
+
+        _ = self;
     }
-    fn parent(self: *NodeInterface) ?*NodeInterface {
-        const _self: *ElementNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn parent(self: *ElementNode) ?*Node {
+
+        _ = self;
     }
-    fn string_value(self: *NodeInterface) []u8 {
-        const _self: *ElementNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn string_value(self: *ElementNode) []u8 {
+
+        _ = self;
     }
-    fn type_name(self: *NodeInterface) ?QName {
-        const _self: *ElementNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn type_name(self: *ElementNode) ?QName {
+
+        _ = self;
     }
-    fn typed_value(self: *NodeInterface) []anyAtomicType {
-        const _self: *ElementNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn typed_value(self: *ElementNode) []anyAtomicType {
+
+        _ = self;
     }
-    fn unparsed_entity_public_id(self: *NodeInterface, entityname: []u8) []u8 {
-        const _self: *ElementNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn unparsed_entity_public_id(self: *ElementNode, entityname: []u8) []u8 {
+
+        _ = self;
         _ = entityname;
     }
-    fn unparsed_entity_system_id(self: *NodeInterface, entityname: []u8) []u8 {
-        const _self: *ElementNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn unparsed_entity_system_id(self: *ElementNode, entityname: []u8) []u8 {
+
+        _ = self;
         _ = entityname;
     }
 };
@@ -321,93 +276,70 @@ pub const AttributeNode = struct {
     _is_id: bool,
     _is_idrefs: bool,
 
-    node: NodeInterface,
+    fn attributes(self: *AttributeNode) []*AttributeNode {
 
-    pub fn init() AttributeNode {
-        return .{ .node = NodeInterface{
-            .attributes = attributes,
-            .base_uri = base_uri,
-            .children = children,
-            .document_uri = document_uri,
-            .is_id = is_id,
-            .is_idrefs = is_idrefs,
-            .namespace_nodes = namespace_nodes,
-            .nilled = nilled,
-            .node_kind = node_kind,
-            .node_name = node_name,
-            .parent = parent,
-            .string_value = string_value,
-            .type_name = type_name,
-            .typed_value = typed_value,
-            .unparsed_entity_public_id = unparsed_entity_public_id,
-            .unparsed_entity_system_id = unparsed_entity_system_id,
-        } };
+        _ = self;
     }
+    fn base_uri(self: *AttributeNode) ?[]u8 {
 
-    fn attributes(self: *NodeInterface) []*AttributeNode {
-        const _self: *AttributeNode = @fieldParentPtr("node", self);
-        _ = _self;
+        _ = self;
     }
-    fn base_uri(self: *NodeInterface) ?[]u8 {
-        const _self: *AttributeNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn children(self: *AttributeNode) []*Node {
+
+        _ = self;
     }
-    fn children(self: *NodeInterface) []*NodeInterface {
-        const _self: *AttributeNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn document_uri(self: *AttributeNode) ?[]u8 {
+
+        _ = self;
     }
-    fn document_uri(self: *NodeInterface) ?[]u8 {
-        const _self: *AttributeNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn is_id(self: *AttributeNode) bool {
+
+        _ = self;
     }
-    fn is_id(self: *NodeInterface) bool {
-        const _self: *AttributeNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn is_idrefs(self: *AttributeNode) bool {
+
+        _ = self;
     }
-    fn is_idrefs(self: *NodeInterface) bool {
-        const _self: *AttributeNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn namespace_nodes(self: *AttributeNode) []*Node {
+
+        _ = self;
     }
-    fn namespace_nodes(self: *NodeInterface) []*NodeInterface {
-        const _self: *AttributeNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn nilled(self: *AttributeNode) bool {
+
+        _ = self;
     }
-    fn nilled(self: *NodeInterface) bool {
-        const _self: *AttributeNode = @fieldParentPtr("node", self);
-        _ = _self;
-    }
-    fn node_kind(self: *NodeInterface) []const u8 {
+    fn node_kind(self: *AttributeNode) []const u8 {
         _ = self;
         return NodeType.attribute.str();
     }
-    fn node_name(self: *NodeInterface) ?QName {
-        const _self: *AttributeNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn node_name(self: *AttributeNode) ?QName {
+
+        _ = self;
     }
-    fn parent(self: *NodeInterface) ?*NodeInterface {
-        const _self: *AttributeNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn parent(self: *AttributeNode) ?*Node {
+
+        _ = self;
     }
-    fn string_value(self: *NodeInterface) []u8 {
-        const _self: *AttributeNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn string_value(self: *AttributeNode) []u8 {
+
+        _ = self;
     }
-    fn type_name(self: *NodeInterface) ?QName {
-        const _self: *AttributeNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn type_name(self: *AttributeNode) ?QName {
+
+        _ = self;
     }
-    fn typed_value(self: *NodeInterface) []anyAtomicType {
-        const _self: *AttributeNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn typed_value(self: *AttributeNode) []anyAtomicType {
+
+        _ = self;
     }
-    fn unparsed_entity_public_id(self: *NodeInterface, entityname: []u8) []u8 {
-        const _self: *AttributeNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn unparsed_entity_public_id(self: *AttributeNode, entityname: []u8) []u8 {
+
+        _ = self;
         _ = entityname;
     }
-    fn unparsed_entity_system_id(self: *NodeInterface, entityname: []u8) []u8 {
-        const _self: *AttributeNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn unparsed_entity_system_id(self: *AttributeNode, entityname: []u8) []u8 {
+
+        _ = self;
         _ = entityname;
     }
 };
@@ -415,95 +347,72 @@ pub const AttributeNode = struct {
 pub const NamespaceNode = struct {
     prefix: ?[]u8,
     uri: []u8,
-    _parent: ?NodeInterface,
+    _parent: ?Node,
 
-    node: NodeInterface,
+    fn attributes(self: *NamespaceNode) []*AttributeNode {
 
-    pub fn init() NamespaceNode {
-        return .{ .node = NodeInterface{
-            .attributes_fn = attributes,
-            .base_uri_fn = base_uri,
-            .children_fn = children,
-            .document_uri_fn = document_uri,
-            .is_id_fn = is_id,
-            .is_idrefs_fn = is_idrefs,
-            .namespace_nodes_fn = namespace_nodes,
-            .nilled_fn = nilled,
-            .node_kind_fn = node_kind,
-            .node_name_fn = node_name,
-            .parent_fn = parent,
-            .string_value_fn = string_value,
-            .type_name_fn = type_name,
-            .typed_value_fn = typed_value,
-            .unparsed_entity_public_id_fn = unparsed_entity_public_id,
-            .unparsed_entity_system_id_fn = unparsed_entity_system_id,
-        } };
+        _ = self;
     }
+    fn base_uri(self: *NamespaceNode) ?[]u8 {
 
-    fn attributes(self: *NodeInterface) []*AttributeNode {
-        const _self: *NamespaceNode = @fieldParentPtr("node", self);
-        _ = _self;
+        _ = self;
     }
-    fn base_uri(self: *NodeInterface) ?[]u8 {
-        const _self: *NamespaceNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn children(self: *NamespaceNode) []*Node {
+
+        _ = self;
     }
-    fn children(self: *NodeInterface) []*NodeInterface {
-        const _self: *NamespaceNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn document_uri(self: *NamespaceNode) ?[]u8 {
+
+        _ = self;
     }
-    fn document_uri(self: *NodeInterface) ?[]u8 {
-        const _self: *NamespaceNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn is_id(self: *NamespaceNode) bool {
+
+        _ = self;
     }
-    fn is_id(self: *NodeInterface) bool {
-        const _self: *NamespaceNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn is_idrefs(self: *NamespaceNode) bool {
+
+        _ = self;
     }
-    fn is_idrefs(self: *NodeInterface) bool {
-        const _self: *NamespaceNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn namespace_nodes(self: *NamespaceNode) []*Node {
+
+        _ = self;
     }
-    fn namespace_nodes(self: *NodeInterface) []*NodeInterface {
-        const _self: *NamespaceNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn nilled(self: *NamespaceNode) bool {
+
+        _ = self;
     }
-    fn nilled(self: *NodeInterface) bool {
-        const _self: *NamespaceNode = @fieldParentPtr("node", self);
-        _ = _self;
-    }
-    fn node_kind(self: *NodeInterface) []const u8 {
+    fn node_kind(self: *NamespaceNode) []const u8 {
         _ = self;
         return NodeType.namespace.str();
     }
-    fn node_name(self: *NodeInterface) ?QName {
-        const _self: *NamespaceNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn node_name(self: *NamespaceNode) ?QName {
+
+        _ = self;
     }
-    fn parent(self: *NodeInterface) ?*NodeInterface {
-        const _self: *NamespaceNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn parent(self: *NamespaceNode) ?*Node {
+
+        _ = self;
     }
-    fn string_value(self: *NodeInterface) []u8 {
-        const _self: *NamespaceNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn string_value(self: *NamespaceNode) []u8 {
+
+        _ = self;
     }
-    fn type_name(self: *NodeInterface) ?QName {
-        const _self: *NamespaceNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn type_name(self: *NamespaceNode) ?QName {
+
+        _ = self;
     }
-    fn typed_value(self: *NodeInterface) []anyAtomicType {
-        const _self: *NamespaceNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn typed_value(self: *NamespaceNode) []anyAtomicType {
+
+        _ = self;
     }
-    fn unparsed_entity_public_id(self: *NodeInterface, entityname: []u8) []u8 {
-        const _self: *NamespaceNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn unparsed_entity_public_id(self: *NamespaceNode, entityname: []u8) []u8 {
+
+        _ = self;
         _ = entityname;
     }
-    fn unparsed_entity_system_id(self: *NodeInterface, entityname: []u8) []u8 {
-        const _self: *NamespaceNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn unparsed_entity_system_id(self: *NamespaceNode, entityname: []u8) []u8 {
+
+        _ = self;
         _ = entityname;
     }
 };
@@ -514,415 +423,369 @@ pub const ProcessingInstructionNode = struct {
     _base_uri: ?[]u8,
     _parent: ?[]u8,
 
-    node: NodeInterface,
+    fn attributes(self: *ProcessingInstructionNode) []*AttributeNode {
 
-    pub fn init() ProcessingInstructionNode {
-        return .{ .node = NodeInterface{
-            .attributes_fn = attributes,
-            .base_uri_fn = base_uri,
-            .children_fn = children,
-            .document_uri_fn = document_uri,
-            .is_id_fn = is_id,
-            .is_idrefs_fn = is_idrefs,
-            .namespace_nodes_fn = namespace_nodes,
-            .nilled_fn = nilled,
-            .node_kind_fn = node_kind,
-            .node_name_fn = node_name,
-            .parent_fn = parent,
-            .string_value_fn = string_value,
-            .type_name_fn = type_name,
-            .typed_value_fn = typed_value,
-            .unparsed_entity_public_id_fn = unparsed_entity_public_id,
-            .unparsed_entity_system_id_fn = unparsed_entity_system_id,
-        } };
+        _ = self;
     }
+    fn base_uri(self: *ProcessingInstructionNode) ?[]u8 {
 
-    fn attributes(self: *NodeInterface) []*AttributeNode {
-        const _self: *ProcessingInstructionNode = @fieldParentPtr("node", self);
-        _ = _self;
+        _ = self;
     }
-    fn base_uri(self: *NodeInterface) ?[]u8 {
-        const _self: *ProcessingInstructionNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn children(self: *ProcessingInstructionNode) []*Node {
+
+        _ = self;
     }
-    fn children(self: *NodeInterface) []*NodeInterface {
-        const _self: *ProcessingInstructionNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn document_uri(self: *ProcessingInstructionNode) ?[]u8 {
+
+        _ = self;
     }
-    fn document_uri(self: *NodeInterface) ?[]u8 {
-        const _self: *ProcessingInstructionNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn is_id(self: *ProcessingInstructionNode) bool {
+
+        _ = self;
     }
-    fn is_id(self: *NodeInterface) bool {
-        const _self: *ProcessingInstructionNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn is_idrefs(self: *ProcessingInstructionNode) bool {
+
+        _ = self;
     }
-    fn is_idrefs(self: *NodeInterface) bool {
-        const _self: *ProcessingInstructionNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn namespace_nodes(self: *ProcessingInstructionNode) []*Node {
+
+        _ = self;
     }
-    fn namespace_nodes(self: *NodeInterface) []*NodeInterface {
-        const _self: *ProcessingInstructionNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn nilled(self: *ProcessingInstructionNode) bool {
+
+        _ = self;
     }
-    fn nilled(self: *NodeInterface) bool {
-        const _self: *ProcessingInstructionNode = @fieldParentPtr("node", self);
-        _ = _self;
-    }
-    fn node_kind(self: *NodeInterface) []const u8 {
+    fn node_kind(self: *ProcessingInstructionNode) []const u8 {
         _ = self;
         return NodeType.processing_instruction.str();
     }
-    fn node_name(self: *NodeInterface) ?QName {
-        const _self: *ProcessingInstructionNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn node_name(self: *ProcessingInstructionNode) ?QName {
+
+        _ = self;
     }
-    fn parent(self: *NodeInterface) ?*NodeInterface {
-        const _self: *ProcessingInstructionNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn parent(self: *ProcessingInstructionNode) ?*Node {
+
+        _ = self;
     }
-    fn string_value(self: *NodeInterface) []u8 {
-        const _self: *ProcessingInstructionNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn string_value(self: *ProcessingInstructionNode) []u8 {
+
+        _ = self;
     }
-    fn type_name(self: *NodeInterface) ?QName {
-        const _self: *ProcessingInstructionNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn type_name(self: *ProcessingInstructionNode) ?QName {
+
+        _ = self;
     }
-    fn typed_value(self: *NodeInterface) []anyAtomicType {
-        const _self: *ProcessingInstructionNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn typed_value(self: *ProcessingInstructionNode) []anyAtomicType {
+
+        _ = self;
     }
-    fn unparsed_entity_public_id(self: *NodeInterface, entityname: []u8) []u8 {
-        const _self: *ProcessingInstructionNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn unparsed_entity_public_id(self: *ProcessingInstructionNode, entityname: []u8) []u8 {
+
+        _ = self;
         _ = entityname;
     }
-    fn unparsed_entity_system_id(self: *NodeInterface, entityname: []u8) []u8 {
-        const _self: *ProcessingInstructionNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn unparsed_entity_system_id(self: *ProcessingInstructionNode, entityname: []u8) []u8 {
+
+        _ = self;
         _ = entityname;
     }
 };
 
 pub const TextNode = struct {
     content: []u8,
-    _parent: ?*NodeInterface,
+    _parent: ?*Node,
     is_cdata: bool,
-    node: NodeInterface,
 
-    pub fn init() TextNode {
-        return .{ .node = NodeInterface{
-            .attributes_fn = attributes,
-            .base_uri_fn = base_uri,
-            .children_fn = children,
-            .document_uri_fn = document_uri,
-            .is_id_fn = is_id,
-            .is_idrefs_fn = is_idrefs,
-            .namespace_nodes_fn = namespace_nodes,
-            .nilled_fn = nilled,
-            .node_kind_fn = node_kind,
-            .node_name_fn = node_name,
-            .parent_fn = parent,
-            .string_value_fn = string_value,
-            .type_name_fn = type_name,
-            .typed_value_fn = typed_value,
-            .unparsed_entity_public_id_fn = unparsed_entity_public_id,
-            .unparsed_entity_system_id_fn = unparsed_entity_system_id,
-        } };
-    }
+    fn attributes(self: *TextNode) []*AttributeNode {
 
-    fn attributes(self: *NodeInterface) []*AttributeNode {
-        const _self: *TextNode = @fieldParentPtr("node", self);
-        _ = _self;
+        _ = self;
     }
-    fn base_uri(self: *NodeInterface) ?[]u8 {
-        const _self: *TextNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn base_uri(self: *TextNode) ?[]u8 {
+
+        _ = self;
     }
-    fn children(self: *NodeInterface) []*NodeInterface {
-        const _self: *TextNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn children(self: *TextNode) []*Node {
+
+        _ = self;
     }
-    fn document_uri(self: *NodeInterface) ?[]u8 {
-        const _self: *TextNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn document_uri(self: *TextNode) ?[]u8 {
+
+        _ = self;
     }
-    fn is_id(self: *NodeInterface) bool {
-        const _self: *TextNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn is_id(self: *TextNode) bool {
+
+        _ = self;
     }
-    fn is_idrefs(self: *NodeInterface) bool {
-        const _self: *TextNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn is_idrefs(self: *TextNode) bool {
+
+        _ = self;
     }
-    fn namespace_nodes(self: *NodeInterface) []*NodeInterface {
-        const _self: *TextNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn namespace_nodes(self: *TextNode) []*Node {
+
+        _ = self;
     }
-    fn nilled(self: *NodeInterface) bool {
-        const _self: *TextNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn nilled(self: *TextNode) bool {
+
+        _ = self;
     }
-    fn node_kind(self: *NodeInterface) []const u8 {
+    fn node_kind(self: *TextNode) []const u8 {
         _ = self;
         return NodeType.text.str();
     }
-    fn node_name(self: *NodeInterface) ?QName {
-        const _self: *TextNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn node_name(self: *TextNode) ?QName {
+
+        _ = self;
     }
-    fn parent(self: *NodeInterface) ?*NodeInterface {
-        const _self: *TextNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn parent(self: *TextNode) ?*Node {
+
+        _ = self;
     }
-    fn string_value(self: *NodeInterface) []u8 {
-        const _self: *TextNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn string_value(self: *TextNode) []u8 {
+
+        _ = self;
     }
-    fn type_name(self: *NodeInterface) ?QName {
-        const _self: *TextNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn type_name(self: *TextNode) ?QName {
+
+        _ = self;
     }
-    fn typed_value(self: *NodeInterface) []anyAtomicType {
-        const _self: *TextNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn typed_value(self: *TextNode) []anyAtomicType {
+
+        _ = self;
     }
-    fn unparsed_entity_public_id(self: *NodeInterface, entityname: []u8) []u8 {
-        const _self: *TextNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn unparsed_entity_public_id(self: *TextNode, entityname: []u8) []u8 {
+
+        _ = self;
         _ = entityname;
     }
-    fn unparsed_entity_system_id(self: *NodeInterface, entityname: []u8) []u8 {
-        const _self: *TextNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn unparsed_entity_system_id(self: *TextNode, entityname: []u8) []u8 {
+
+        _ = self;
         _ = entityname;
     }
 };
 
 pub const CommentNode = struct {
     content: []u8,
-    _parent: ?*NodeInterface,
+    _parent: ?*Node,
 
-    node: NodeInterface,
 
-    pub fn init() CommentNode {
-        return .{ .node = NodeInterface{
-            .attributes_fn = attributes,
-            .base_uri_fn = base_uri,
-            .children_fn = children,
-            .document_uri_fn = document_uri,
-            .is_id_fn = is_id,
-            .is_idrefs_fn = is_idrefs,
-            .namespace_nodes_fn = namespace_nodes,
-            .nilled_fn = nilled,
-            .node_kind_fn = node_kind,
-            .node_name_fn = node_name,
-            .parent_fn = parent,
-            .string_value_fn = string_value,
-            .type_name_fn = type_name,
-            .typed_value_fn = typed_value,
-            .unparsed_entity_public_id_fn = unparsed_entity_public_id,
-            .unparsed_entity_system_id_fn = unparsed_entity_system_id,
-        } };
-    }
+    fn attributes(self: *CommentNode) []*AttributeNode {
 
-    fn attributes(self: *NodeInterface) []*AttributeNode {
-        const _self: *CommentNode = @fieldParentPtr("node", self);
-        _ = _self;
+        _ = self;
     }
-    fn base_uri(self: *NodeInterface) ?[]u8 {
-        const _self: *CommentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn base_uri(self: *CommentNode) ?[]u8 {
+
+        _ = self;
     }
-    fn children(self: *NodeInterface) []*NodeInterface {
-        const _self: *CommentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn children(self: *CommentNode) []*Node {
+
+        _ = self;
     }
-    fn document_uri(self: *NodeInterface) ?[]u8 {
-        const _self: *CommentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn document_uri(self: *CommentNode) ?[]u8 {
+
+        _ = self;
     }
-    fn is_id(self: *NodeInterface) bool {
-        const _self: *CommentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn is_id(self: *CommentNode) bool {
+
+        _ = self;
     }
-    fn is_idrefs(self: *NodeInterface) bool {
-        const _self: *CommentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn is_idrefs(self: *CommentNode) bool {
+
+        _ = self;
     }
-    fn namespace_nodes(self: *NodeInterface) []*NodeInterface {
-        const _self: *CommentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn namespace_nodes(self: *CommentNode) []*Node {
+
+        _ = self;
     }
-    fn nilled(self: *NodeInterface) bool {
-        const _self: *CommentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn nilled(self: *CommentNode) bool {
+
+        _ = self;
     }
-    fn node_kind(self: *NodeInterface) []const u8 {
+    fn node_kind(self: *CommentNode) []const u8 {
         _ = self;
         return NodeType.comment.str();
     }
-    fn node_name(self: *NodeInterface) ?QName {
-        const _self: *CommentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn node_name(self: *CommentNode) ?QName {
+
+        _ = self;
     }
-    fn parent(self: *NodeInterface) ?*NodeInterface {
-        const _self: *CommentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn parent(self: *CommentNode) ?*Node {
+
+        _ = self;
     }
-    fn string_value(self: *NodeInterface) []u8 {
-        const _self: *CommentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn string_value(self: *CommentNode) []u8 {
+
+        _ = self;
     }
-    fn type_name(self: *NodeInterface) ?QName {
-        const _self: *CommentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn type_name(self: *CommentNode) ?QName {
+
+        _ = self;
     }
-    fn typed_value(self: *NodeInterface) []anyAtomicType {
-        const _self: *CommentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn typed_value(self: *CommentNode) []anyAtomicType {
+
+        _ = self;
     }
-    fn unparsed_entity_public_id(self: *NodeInterface, entityname: []u8) []u8 {
-        const _self: *CommentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn unparsed_entity_public_id(self: *CommentNode, entityname: []u8) []u8 {
+
+        _ = self;
         _ = entityname;
     }
-    fn unparsed_entity_system_id(self: *NodeInterface, entityname: []u8) []u8 {
-        const _self: *CommentNode = @fieldParentPtr("node", self);
-        _ = _self;
+    fn unparsed_entity_system_id(self: *CommentNode, entityname: []u8) []u8 {
+
+        _ = self;
         _ = entityname;
     }
 };
 
-pub const NodeInterface = struct {
-    attributes_fn: *const fn (self: *NodeInterface) []*AttributeNode,
-    base_uri_fn: *const fn (self: *NodeInterface) ?[]u8,
-    children_fn: *const fn (self: *NodeInterface) []*NodeInterface,
-    document_uri_fn: *const fn (self: *NodeInterface) ?[]u8,
-    is_id_fn: *const fn (self: *NodeInterface) bool,
-    is_idrefs_fn: *const fn (self: *NodeInterface) bool,
-    namespace_nodes_fn: *const fn (self: *NodeInterface) []*NodeInterface,
-    nilled_fn: *const fn (self: *NodeInterface) bool,
-    node_kind_fn: *const fn (self: *NodeInterface) []const u8,
-    node_name_fn: *const fn (self: *NodeInterface) ?QName,
-    parent_fn: *const fn (self: *NodeInterface) ?*NodeInterface,
-    string_value_fn: *const fn (self: *NodeInterface) []u8,
-    type_name_fn: *const fn (self: *NodeInterface) ?QName,
-    typed_value_fn: *const fn (self: *NodeInterface) []anyAtomicType,
-    unparsed_entity_public_id_fn: *const fn (self: *NodeInterface, entityname: []u8) []u8,
-    unparsed_entity_system_id_fn: *const fn (self: *NodeInterface, entityname: []u8) []u8,
+// Tagged union for handling nodes interfaces
+pub const Node = union(NodeType) {
+
+    document: DocumentNode,
+    element: ElementNode,
+    attribute:AttributeNode,
+    text:TextNode,
+    namespace:NamespaceNode,
+    processing_instruction: ProcessingInstructionNode,
+    comment: CommentNode,
 
     /// dm:attributes($n as node()) as attribute()*
     ///
     /// The dm:attributes accessor returns the attributes of a node as a sequence containing zero or more Attribute Nodes. The order of Attribute Nodes is stable but implementation dependent.
     /// It is defined on all seven node kinds.
-    pub fn attributes(self: *NodeInterface) []*AttributeNode {
-        return self.attributes_fn(self);
+    pub fn attributes(self: *Node) []*AttributeNode {
+        switch (self) {
+            inline else => |impl| return impl.attributes(),
+        }
     }
 
     /// dm:base-uri($n as node()) as xs:anyURI?
     ///
     ///The dm:base-uri accessor returns the base URI of a node as a sequence containing zero or one URI reference. For more information about base URIs, see https://www.w3.org/TR/xmlbase/.
     ///It is defined on all seven node kinds
-    pub fn base_uri(self: *NodeInterface) ?[]u8 {
-        return self.base_uri_fn(self);
+    pub fn base_uri(self: *Node) ?[]u8 {
+        switch (self) {
+            inline else => |impl| return impl.base_uri(),
+        }
     }
 
     /// TODO : dm:children($n as node()) as node()*
     ///
     /// The dm:children accessor returns the children of a node as a sequence containing zero or more nodes.
     /// It is defined on all seven node kinds.
-    pub fn children(self: *NodeInterface) []*NodeInterface {
-        return self.children_fn(self);
+    pub fn children(self: *Node) []*Node {
+        switch (self) {
+            inline else => |impl| return impl.children(),
+        }
     }
 
     /// TODO : dm:document-uri($node as node()) as xs:anyURI?
     ///
     /// The dm:document-uri accessor returns the absolute URI of the resource from which the Document Node was constructed, if the absolute URI is available. If there is no URI available, or if it cannot be made absolute when the Document Node is constructed, or if it is used on a node other than a Document Node, the empty sequence is returned.
     /// It is defined on all seven node kinds.
-    pub fn document_uri(self: *NodeInterface) ?[]u8 {
-        return self.document_uri_fn(self);
+    pub fn document_uri(self: *Node) ?[]u8 {
+        switch (self) {
+            inline else => |impl| return impl.document_uri(),
+        }
     }
 
     /// TODO : dm:is-id($node as node()) as xs:boolean?
     ///
     /// The dm:is-id accessor returns true if the node is an XML ID. Exactly what constitutes an ID depends in part on how the data model was constructed, see 6.2 Element Nodes and 6.3 Attribute Nodes.
     /// It is defined on all seven node kinds.
-    pub fn is_id(self: *NodeInterface) bool {
-        return self.is_id_fn(self);
+    pub fn is_id(self: *Node) bool {
+        switch (self) {
+            inline else => |impl| return impl.is_id(),
+        }
     }
 
     /// TODO : dm:is-idrefs($node as node()) as xs:boolean?
     ///
     /// The dm:is-idrefs accessor returns true if the node is an XML IDREF or IDREFS. Exactly what constitutes an IDREF or IDREFS depends in part on how the data model was constructed, see 6.2 Element Nodes and 6.3 Attribute Nodes.
     // It is defined on all seven node kinds.
-    pub fn is_idrefs(self: *NodeInterface) bool {
-        return self.is_idrefs_fn(self);
+    pub fn is_idrefs(self: *Node) bool {
+        switch (self) {
+            inline else => |impl| return impl.is_idrefs(),
+        }
     }
 
     /// TODO : dm:namespace-nodes($n as node()) as node()*
     ///
     /// The dm:namespace-nodes accessor returns the dynamic, in-scope namespaces associated with a node as a sequence containing zero or more Namespace Nodes. The order of Namespace Nodes is stable but implementation dependent.
     /// It is defined on all seven node kinds.
-    pub fn namespace_nodes(self: *NodeInterface) []*NodeInterface {
-        return self.namespace_nodes_fn(self);
+    pub fn namespace_nodes(self: *Node) []*Node {
+        switch (self) {
+            inline else => |impl| return impl.namespace_nodes(),
+        }
     }
 
     /// TODO : dm:nilled($n as node()) as xs:boolean?
     ///
     /// The dm:nilled accessor returns true if the node is "nilled". [Schema Part 1] introduced the nilled mechanism to signal that an element should be accepted as valid when it has no content even when it has a content type which does not require or even necessarily allow empty content.
     /// It is defined on all seven node kinds.
-    pub fn nilled(self: *NodeInterface) bool {
-        return self.nilled_fn(self);
+    pub fn nilled(self: *Node) bool {
+        switch (self) {
+            inline else => |impl| return impl.nilled(),
+        }
     }
 
     /// dm:node-kind($n as node()) as xs:string
     ///
     /// The dm:node-kind accessor returns a string identifying the kind of node. It will be one of the following, depending on the kind of node: “attribute”, “comment”, “document”, “element”, “namespace” “processing-instruction”, or “text”.
     /// It is defined on all seven node kinds.
-    pub fn node_kind(self: *NodeInterface) []const u8 {
-        return self.node_kind_fn(self);
+    pub fn node_kind(self: *Node) []const u8 {
+        switch (self) {
+            inline else => |impl| return impl.node_kind(),
+        }
     }
 
     /// dm:node-name($n as node()) as xs:QName?
     ///
     /// The dm:node-name accessor returns the name of the node as a sequence of zero or one xs:QNames. Note that the QName value includes an optional prefix as described in 3.3.3 QNames and NOTATIONS.
     /// It is defined on all seven node kinds.
-    pub fn node_name(self: *NodeInterface) ?QName {
-        return self.node_name_fn(self);
+    pub fn node_name(self: *Node) ?QName {
+        switch (self) {
+            inline else => |impl| return impl.node_name(),
+        }
     }
 
     /// TODO : dm:parent($n as node()) as node()?
     ///
     /// The dm:parent accessor returns the parent of a node as a sequence containing zero or one nodes.
     /// It is defined on all seven node kinds.
-    pub fn parent(self: *NodeInterface) ?*NodeInterface {
-        return self.parent_fn(self);
+    pub fn parent(self: *Node) ?*Node {
+        switch (self) {
+            inline else => |impl| return impl.parent(),
+        }
     }
 
     /// TODO : dm:string-value($n as node()) as xs:string
     ///
     /// The dm:string-value accessor returns the string value of a node.
     /// It is defined on all seven node kinds.
-    pub fn string_value(self: *NodeInterface) []u8 {
-        return self.string_value_fn(self);
+    pub fn string_value(self: *Node) []u8 {
+        switch (self) {
+            inline else => |impl| return impl.string_value(),
+        }
     }
 
     /// TODO : dm:type-name($n as node()) as xs:QName?
     ///
     /// The dm:type-name accessor returns the name of the schema type of a node as a sequence of zero or one xs:QNames.
     /// It is defined on all seven node kinds.
-    pub fn type_name(self: *NodeInterface) ?QName {
-        return self.type_name_fn(self);
+    pub fn type_name(self: *Node) ?QName {
+        switch (self) {
+            inline else => |impl| return impl.type_name(),
+        }
     }
 
     /// TODO : dm:typed-value($n as node()) as xs:anyAtomicType*
     ///
     /// The dm:typed-value accessor returns the typed-value of the node as a sequence of zero or more atomic values.
     /// It is defined on all seven node kinds.
-    pub fn typed_value(self: *NodeInterface) []anyAtomicType {
-        return self.typed_value_fn(self);
+    pub fn typed_value(self: *Node) []anyAtomicType {
+        switch (self) {
+            inline else => |impl| return impl.typed_value(),
+        }
     }
 
     /// TODO : dm:unparsed-entity-public-id($node as node(), $entityname as xs:string) as xs:string?
@@ -930,14 +793,18 @@ pub const NodeInterface = struct {
     /// The dm:unparsed-entity-public-id accessor returns the public identifier of an unparsed external entity declared in the specified document.
     /// If no entity with the name specified in $entityname exists, or if the entity is not an external unparsed entity, or if the entity has no public identifier, the empty sequence is returned.
     /// It is defined on all seven node kinds.
-    pub fn unparsed_entity_public_id(self: *NodeInterface, entityname: []u8) []u8 {
-        return self.unparsed_entity_public_id_fn(self, entityname);
+    pub fn unparsed_entity_public_id(self: *Node, entityname: []u8) []u8 {
+        switch (self) {
+            inline else => |impl| return impl.unparsed_entity_public_id(entityname),
+        }
     }
 
     /// TODO : dm:unparsed-entity-system-id($node as node(), $entityname as xs:string) as xs:anyURI?
     /// The dm:unparsed-entity-system-id accessor returns the system identifier of an unparsed external entity declared in the specified document. The value is an absolute URI, and is obtained by resolving the [system identifier] of the unparsed entity information item against the [declaration base URI] of the same item. If no entity with the name specified in $entityname exists, or if the entity is not an external unparsed entity, the empty sequence is returned.
     /// It is defined on all seven node kinds.
-    pub fn unparsed_entity_system_id(self: *NodeInterface, entityname: []u8) []u8 {
-        return self.unparsed_entity_system_id_fn(self, entityname);
+    pub fn unparsed_entity_system_id(self: *Node, entityname: []u8) []u8 {
+        switch (self) {
+            inline else => |impl| return impl.unparsed_entity_system_id(entityname),
+        }
     }
 };
