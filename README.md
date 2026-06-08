@@ -5,7 +5,11 @@ Some of my experiments with the zig language
 actually trying to make SAX parser for XML 1.1 with zig, to be used for other side project
 like an xml formatter to pretty print or linearize xml
 
+see interface implementations in https://williamw520.github.io/2025/07/13/zig-interface-revisited.html
 
+or 
+
+https://medium.com/@trinitietp/interfaces-in-zig-five-patterns-you-should-know-5600acf3cfad
 
 // Notes pour implementation d'un selecteur de version (demande a chatgpt de résumé les différences entre les version 1.1 et 1.0 de la specification XML )
 // Les spécifications du format XML 1.1 ont introduit quelques changements par rapport à la version 1.0 pour résoudre des problèmes liés à l'utilisation internationale et à la compatibilité avec d'autres standards. Voici les principales différences entre XML 1.0 et XML 1.1 :

@@ -363,74 +363,72 @@ pub const State = struct {
     currentColumn: usize = 0,
 };
 
-
 // VTable style interface from https://medium.com/@trinitietp/interfaces-in-zig-five-patterns-you-should-know-5600acf3cfad
 pub const Methods = struct {
     // Start the parser
-    onDocumentStart: ?*const fn (self: *anyopaque) void = null,
-    onDocumentEnd: ?*const fn (self: *anyopaque) void = null,
+    onDocumentStart: ?*const fn (ptr: *anyopaque) void = null,
+    onDocumentEnd: ?*const fn (ptr: *anyopaque) void = null,
     /// Handle the start of a named tag (return the fullname including prefix if any)
-    onNamedTagStart: ?*const fn (self: *anyopaque, name: []const u21) void = null,
+    onNamedTagStart: ?*const fn (ptr: *anyopaque, name: []const u21) void = null,
     /// Handle attribute name
-    onAttributeName: ?*const fn (self: *anyopaque, name: []const u21) void = null,
+    onAttributeName: ?*const fn (ptr: *anyopaque, name: []const u21) void = null,
     /// Handle attribute value start with " or ' delimiter
-    onAttributeValueStart: ?*const fn (self: *anyopaque, delimiter: u21) void = null,
+    onAttributeValueStart: ?*const fn (ptr: *anyopaque, delimiter: u21) void = null,
     /// Handle attribute value content (can be raised multiple times if entity is found)
-    onAttributeValueContent: ?*const fn (self: *anyopaque, content: []const u21) void = null,
+    onAttributeValueContent: ?*const fn (ptr: *anyopaque, content: []const u21) void = null,
     /// Handle attribute end (previous delimiter was found)
-    onAttributeValueEnd: ?*const fn (self: *anyopaque, delimiter: u21) void = null,
+    onAttributeValueEnd: ?*const fn (ptr: *anyopaque, delimiter: u21) void = null,
     /// Handle the closing of a named tag (including if it is selfclosing or not)
-    onNamedTagEnd: ?*const fn (self: *anyopaque, selfclosing: bool) void = null,
+    onNamedTagEnd: ?*const fn (ptr: *anyopaque, selfclosing: bool) void = null,
     /// Handle a closing tag
-    onClosingTag: ?*const fn (self: *anyopaque, name: []const u21) void = null,
+    onClosingTag: ?*const fn (ptr: *anyopaque, name: []const u21) void = null,
     /// Handle doctype opening found
-    onDoctypeStart: ?*const fn (self: *anyopaque) void = null,
-    onDoctypeRoot: ?*const fn (self: *anyopaque, root: []const u21) void = null,
-    onDoctypeType: ?*const fn (self: *anyopaque, systemOrPublic: []const u21) void = null,
-    onDoctypePublicIdStart: ?*const fn (self: *anyopaque, delimiter: u21) void = null,
-    onDoctypePublicIdContent: ?*const fn (self: *anyopaque, content: []const u21) void = null,
-    onDoctypePublicIdEnd: ?*const fn (self: *anyopaque, delimiter: u21) void = null,
-    onDoctypeSystemIdStart: ?*const fn (self: *anyopaque, delimiter: u21) void = null,
-    onDoctypeSystemIdContent: ?*const fn (self: *anyopaque, content: []const u21) void = null,
-    onDoctypeSystemIdEnd: ?*const fn (self: *anyopaque, delimiter: u21) void = null,
+    onDoctypeStart: ?*const fn (ptr: *anyopaque) void = null,
+    onDoctypeRoot: ?*const fn (ptr: *anyopaque, root: []const u21) void = null,
+    onDoctypeType: ?*const fn (ptr: *anyopaque, systemOrPublic: []const u21) void = null,
+    onDoctypePublicIdStart: ?*const fn (ptr: *anyopaque, delimiter: u21) void = null,
+    onDoctypePublicIdContent: ?*const fn (ptr: *anyopaque, content: []const u21) void = null,
+    onDoctypePublicIdEnd: ?*const fn (ptr: *anyopaque, delimiter: u21) void = null,
+    onDoctypeSystemIdStart: ?*const fn (ptr: *anyopaque, delimiter: u21) void = null,
+    onDoctypeSystemIdContent: ?*const fn (ptr: *anyopaque, content: []const u21) void = null,
+    onDoctypeSystemIdEnd: ?*const fn (ptr: *anyopaque, delimiter: u21) void = null,
     /// Handle doctype subset start found (character [ found while parsing doctype content )
-    onDoctypeSubsetStart: ?*const fn (self: *anyopaque) void = null,
+    onDoctypeSubsetStart: ?*const fn (ptr: *anyopaque) void = null,
     /// Handle doctype subset content (content within [ and ] in DOCTYPE)
-    onDoctypeSubsetContent: ?*const fn (self: *anyopaque, content: []const u21) void = null,
+    onDoctypeSubsetContent: ?*const fn (ptr: *anyopaque, content: []const u21) void = null,
     /// Handle doctype subset end
-    onDoctypeSubsetEnd: ?*const fn (self: *anyopaque) void = null,
+    onDoctypeSubsetEnd: ?*const fn (ptr: *anyopaque) void = null,
     /// Handle doctype end (> found in doctype or after subset end)
-    onDoctypeEnd: ?*const fn (self: *anyopaque) void = null,
+    onDoctypeEnd: ?*const fn (ptr: *anyopaque) void = null,
     /// Handle comment start found
-    onCommentStart: ?*const fn (self: *anyopaque) void = null,
+    onCommentStart: ?*const fn (ptr: *anyopaque) void = null,
     /// Handle comment content
-    onCommentContent: ?*const fn (self: *anyopaque, content: []const u21) void = null,
+    onCommentContent: ?*const fn (ptr: *anyopaque, content: []const u21) void = null,
     /// Handle comment end found
-    onCommentEnd: ?*const fn (self: *anyopaque) void = null,
+    onCommentEnd: ?*const fn (ptr: *anyopaque) void = null,
     /// Handle cdata start found
-    onCDATAStart: ?*const fn (self: *anyopaque) void = null,
+    onCDATAStart: ?*const fn (ptr: *anyopaque) void = null,
     // Note : CDATA content is meant to be treated as text content, so it is returned via onText
     /// Handle cdata end found ]]>
-    onCDATAEnd: ?*const fn (self: *anyopaque) void = null,
+    onCDATAEnd: ?*const fn (ptr: *anyopaque) void = null,
     /// Handle processing instructions start found (<?)
-    onProcessingInstructionStart: ?*const fn (self: *anyopaque, target: []const u21) void = null,
+    onProcessingInstructionStart: ?*const fn (ptr: *anyopaque, target: []const u21) void = null,
     /// Handle processing instruction content
-    onProcessingInstructionContent: ?*const fn (self: *anyopaque, content: []const u21) void = null,
+    onProcessingInstructionContent: ?*const fn (ptr: *anyopaque, content: []const u21) void = null,
     /// Handle processing instruction end found (?>)
-    onProcessingInstructionEnd: ?*const fn (self: *anyopaque) void = null,
+    onProcessingInstructionEnd: ?*const fn (ptr: *anyopaque) void = null,
     /// Handle text nodes
-    onText: ?*const fn (self: *anyopaque, text: []const u21) void = null,
+    onText: ?*const fn (ptr: *anyopaque, text: []const u21) void = null,
     /// Handle XML errors found during parsing
-    onXMLErrors: ?*const fn (self: *anyopaque, previous: State, current: State, xmlError: XMLTokenizerError, message: []const u8) void = null,
-    onStateChanged: ?*const fn (self: *anyopaque, state: State) void = null,
+    onXMLErrors: ?*const fn (ptr: *anyopaque, previous: State, current: State, xmlError: XMLTokenizerError, message: []const u8) void = null,
+    onStateChanged: ?*const fn (ptr: *anyopaque, state: State) void = null,
 };
 
 /// Interface to hold event handlers pointers for the tokenizer
 ///
 pub const EventsInterface = struct {
-    ptr:*anyopaque,
-    methods: *const Methods,
-
+    ptr: *anyopaque,
+    methods: Methods,
 };
 
 fn utf8Size(char: u8) u8 {
@@ -467,7 +465,7 @@ fn isUtf8Part(char: u8) bool {
 pub const ZaxTokenizer = struct {
     const buffer_size = 4096;
     // Empty event handlers with no event handlers
-    events: *EventsInterface,
+    events: *const EventsInterface,
     options: Options,
     parsedChar: [4]u8 = .{ 0, 0, 0, 0 },
     parsedCharLen: usize = 0,
@@ -502,12 +500,12 @@ pub const ZaxTokenizer = struct {
             .status = self.state.status,
         };
         self.state.status = newStatus;
-        if(self.events.methods.onStateChanged) |onStateChanged| {
+        if (self.events.methods.onStateChanged) |onStateChanged| {
             onStateChanged(self.events.ptr, self.state);
         }
     }
 
-    pub fn init(events: *EventsInterface, options: Options) ZaxTokenizer {
+    pub fn init(events: *const EventsInterface, options: Options) ZaxTokenizer {
         return ZaxTokenizer{
             .events = events,
             .options = options,
